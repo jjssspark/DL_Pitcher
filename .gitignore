@@ -25,3 +25,11 @@ streamlit_app/.bilstm_cache/
 
 # macOS
 .DS_Store
+# Python cache
+__pycache__/
+*.py[cod]
+
+# App cache
+streamlit_app/.scan_cache/
+streamlit_app/.yolo_cache/
+streamlit_app/.bilstm_cache/
