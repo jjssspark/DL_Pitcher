@@ -13,3 +13,15 @@ __pycache__/
 venv/
 .env
 .DS_Store
+
+# Python
+__pycache__/
+*.py[cod]
+
+# Cache
+streamlit_app/.scan_cache/
+streamlit_app/.yolo_cache/
+streamlit_app/.bilstm_cache/
+
+# macOS
+.DS_Store

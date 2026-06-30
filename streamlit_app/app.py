@@ -412,14 +412,15 @@ def _run_ocr_check_bg(task_id: str, video_path: str, check_time: float) -> None:
     """방송 오버레이 OCR 실시간 투구 감지 (백그라운드)"""
     try:
         from pose_detector import ocr_check_pitch_overlay
-        is_pitch, pitch_type, speed = ocr_check_pitch_overlay(video_path, check_time)
+        is_pitch, pitch_type, speed, pitch_count = ocr_check_pitch_overlay(video_path, check_time)
         _pose_tasks[task_id] = {
             "status": "done", "is_pitch": is_pitch,
             "pitch_type": pitch_type, "speed": speed,
+            "pitch_count": pitch_count,
             "check_time": check_time,
         }
         if is_pitch:
-            print(f"[OCR실시간] t={check_time:.1f}s → {pitch_type} {speed}mph")
+            print(f"[OCR실시간] t={check_time:.1f}s → {pitch_type} {speed}mph P:{pitch_count}")
     except Exception as e:
         _pose_tasks[task_id] = {
             "status": "error", "is_pitch": False,
@@ -620,6 +621,20 @@ pitches   = st.session_state.game_pitches
 meta      = st.session_state.game_meta
 c_idx     = st.session_state.current_pitch_idx
 loaded    = bool(pitches)
+
+# P:N 카운터 → MLB 인덱스 직접 매핑 (투수별 누적 구 번호)
+# Fox 오버레이 "FLAHERTY P:N" = Flaherty가 던진 N번째 구
+# Top 이닝(NYY 타격) = LAD 투수(Flaherty) 등판
+_pitcher_p_map: dict[int, int] = {}  # pitch_count → pitches[] 인덱스
+if loaded:
+    _p_counts: dict[int, int] = {}  # pitcher_id → 누적 투구 수
+    for _i, _p in enumerate(pitches):
+        _pid = _p.get("pitcher_id", 0)
+        _p_counts[_pid] = _p_counts.get(_pid, 0) + 1
+        _pn = _p_counts[_pid]
+        # Top 이닝 투수(Flaherty)만 P:N에 해당 — 첫 번째 Top 투수 기준
+        if _p.get("inning_topbot") == "Top":
+            _pitcher_p_map[_pn] = _i
 
 
 # ══ 사이드바 ══════════════════════════════════════════════════════
@@ -836,29 +851,39 @@ if loaded:
     aws, hws = cur["away_score"], cur["home_score"]
 
     balls_html   = _count_dots_simple(cur["balls"],   3, "#3b82f6")
-    strikes_html = _count_dots_simple(cur["strikes"], 2, "#ef4444")
-    outs_html    = _count_dots_simple(cur["outs"],    2, "#fbbf24")
+    strikes_html = _count_dots_simple(cur["strikes"], 2, "#f59e0b")
+    outs_html    = _count_dots_simple(cur["outs"],    2, "#ef4444")
 
     st.markdown(
         f'<div class="scoreboard">'
-        f'<div style="display:flex;align-items:center;justify-content:space-between;gap:1rem">'
+        f'<div style="display:flex;align-items:center;justify-content:space-between;gap:.8rem">'
         # 원정팀
-        f'<div style="text-align:center;min-width:80px">'
-        f'<div class="team-name">{aw} <span style="color:#64748b;font-size:.6rem">원정</span></div>'
-        f'<div class="team-score" style="color:{"#e2e8f0" if aws >= hws else "#64748b"}">{aws}</div>'
+        f'<div style="text-align:center;min-width:72px">'
+        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">원정</div>'
+        f'<div style="font-size:.8rem;font-weight:800;color:#94a3b8;letter-spacing:.08em">{aw}</div>'
+        f'<div class="team-score" style="color:{"#f1f5f9" if aws >= hws else "#475569"}">{aws}</div>'
         f'</div>'
         # 중앙 (이닝 + 카운트)
         f'<div style="text-align:center;flex:1">'
-        f'<div class="inning-box" style="margin-bottom:.4rem">{half} {cur["inning"]}회</div>'
-        f'<div style="display:flex;justify-content:center;gap:1.2rem;font-size:.65rem;color:#475569">'
-        f'<span>볼&nbsp;{balls_html}</span>'
-        f'<span>스트라이크&nbsp;{strikes_html}</span>'
-        f'<span>아웃&nbsp;{outs_html}</span>'
+        f'<div class="inning-box" style="margin-bottom:.5rem;font-size:.85rem">{half}&nbsp;{cur["inning"]}회</div>'
+        f'<div style="display:flex;justify-content:center;align-items:center;gap:1.1rem">'
+        f'<div style="display:flex;align-items:center;gap:.32rem">'
+        f'<span style="font-size:.62rem;font-weight:800;color:#60a5fa;letter-spacing:.04em">B</span>'
+        f'{balls_html}</div>'
+        f'<div style="width:1px;height:12px;background:rgba(148,163,184,.18)"></div>'
+        f'<div style="display:flex;align-items:center;gap:.32rem">'
+        f'<span style="font-size:.62rem;font-weight:800;color:#f59e0b;letter-spacing:.04em">S</span>'
+        f'{strikes_html}</div>'
+        f'<div style="width:1px;height:12px;background:rgba(148,163,184,.18)"></div>'
+        f'<div style="display:flex;align-items:center;gap:.32rem">'
+        f'<span style="font-size:.62rem;font-weight:800;color:#ef4444;letter-spacing:.04em">O</span>'
+        f'{outs_html}</div>'
         f'</div></div>'
         # 홈팀
-        f'<div style="text-align:center;min-width:80px">'
-        f'<div class="team-name"><span style="color:#64748b;font-size:.6rem">홈</span> {hw}</div>'
-        f'<div class="team-score" style="color:{"#e2e8f0" if hws >= aws else "#64748b"}">{hws}</div>'
+        f'<div style="text-align:center;min-width:72px">'
+        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">홈</div>'
+        f'<div style="font-size:.8rem;font-weight:800;color:#94a3b8;letter-spacing:.08em">{hw}</div>'
+        f'<div class="team-score" style="color:{"#f1f5f9" if hws >= aws else "#475569"}">{hws}</div>'
         f'</div>'
         f'</div></div>',
         unsafe_allow_html=True)
@@ -889,27 +914,19 @@ _pose_tid = st.session_state.get("_pose_task_id")
 if _pose_tid and _pose_tid in _pose_tasks:
     _ptask = _pose_tasks[_pose_tid]
     if _ptask["status"] in ("done", "error"):
-        if _ptask.get("is_pitch") and loaded:
-            _ocr_type  = _ptask.get("pitch_type")
-            _ocr_speed = _ptask.get("speed")
-            _ocr_code  = _OCR_TO_CODE.get(_ocr_type) if _ocr_type else None
+        _ocr_check_t  = _ptask.get("check_time", -99.0)
+        _scan_last_t  = st.session_state.get("_last_pitch_video_time", -99.0)
+        _scan_covered = _scan_last_t > 0 and _ocr_check_t <= _scan_last_t + 8.0
+        if _ptask.get("is_pitch") and loaded and not _scan_covered:
+            _ocr_type   = _ptask.get("pitch_type")
+            _ocr_speed  = _ptask.get("speed")
+            _ocr_pcount = _ptask.get("pitch_count")
 
-            # 마지막 확인 인덱스 다음부터 탐색 — OCR 속도는 부정확해 구종으로만 매칭
-            _last_mlb    = st.session_state.get("_last_ocr_mlb_idx", -1)
-            _search_from = _last_mlb + 1
-            _best_idx    = None
-            for _si in range(_search_from, min(_search_from + 12, len(pitches))):
-                _sp = pitches[_si]
-                if _ocr_code and _sp.get("pitch_type") and _sp["pitch_type"] != _ocr_code:
-                    continue
-                _best_idx = _si
-                break
+            # 실시간 OCR은 무조건 순차 전진 — P:N OCR 오독 시 큰 점프 방지
+            _last_mlb = st.session_state.get("_last_ocr_mlb_idx", -1)
+            _best_idx = min(_last_mlb + 1, len(pitches) - 1)
+            _method   = "순차"
 
-            if _best_idx is None:
-                # 구종 매칭 실패 → 순차 진행
-                _best_idx = min(_search_from, len(pitches) - 1)
-
-            # OCR 결과 저장 (패널 구종 표시용, MLB 인덱스 기준)
             _vpd = list(st.session_state.get("video_pitch_data", []))
             while len(_vpd) <= _best_idx:
                 _vpd.append({})
@@ -923,7 +940,7 @@ if _pose_tid and _pose_tid in _pose_tasks:
             st.session_state._sync_activated         = True
             if pitches[_new_cidx]["inning"] >= 6:
                 st.session_state._sixth_inning_alert = True
-            print(f"[싱크] MLB #{_best_idx+1} 확정 → c_idx={_new_cidx} ({_ocr_type} {_ocr_speed}mph)")
+            print(f"[싱크] MLB #{_best_idx+1} 확정 → c_idx={_new_cidx} ({_ocr_type} {_ocr_speed}mph) [{_method}]")
 
         del _pose_tasks[_pose_tid]
         st.session_state._pose_task_id = None
@@ -997,13 +1014,12 @@ with col_video:
         # 현재 영상 시각
         # - 컴포넌트 값이 오면 무조건 우선 사용
         # - 없을 때: 재생 중이면 벽시계로 추정, 일시정지면 마지막 값 고정
+        # 벽시계 추정 제거 — YouTube가 보고한 마지막 시각만 사용
+        # (추정 시 버퍼링 중에도 앱 시간이 앞서 달려 미래 구까지 처리되는 문제 방지)
         if _current_video_time is not None:
             _vid_t = _current_video_time
         elif _vid_t_base is not None:
-            if _vid_pl:   # 재생 중일 때만 벽시계 추정 (일시정지 시 오싱크 방지)
-                _vid_t = _vid_t_base + (time.time() - _vid_t_wall)
-            else:
-                _vid_t = _vid_t_base
+            _vid_t = _vid_t_base
         else:
             _vid_t = None
 
@@ -1013,26 +1029,19 @@ with col_video:
             _vpd_ts       = list(st.session_state.get("video_pitch_data", []))
             _last_m       = st.session_state.get("_last_ocr_mlb_idx", -1)
             _new_cidx_ts  = st.session_state.get("current_pitch_idx", 0)
-            while _nsi < len(_vtimes) and _vid_t >= _vtimes[_nsi]:
-                _sinfo  = _vraw[_nsi] if _nsi < len(_vraw) else {}
-                _stype  = _sinfo.get("pitch_type")
-                _scode  = _OCR_TO_CODE.get(_stype) if _stype else None
-                _sfrom  = _last_m + 1
-                _bidx   = None
-                for _mi in range(_sfrom, min(_sfrom + 12, len(pitches))):
-                    _mp = pitches[_mi]
-                    if _scode and _mp.get("pitch_type") and _mp["pitch_type"] != _scode:
-                        continue
-                    _bidx = _mi
-                    break
-                if _bidx is None:
-                    _bidx = min(_sfrom, len(pitches) - 1)
+            if _nsi < len(_vtimes) and _vid_t >= _vtimes[_nsi]:
+                _sinfo   = _vraw[_nsi] if _nsi < len(_vraw) else {}
+                _stype   = _sinfo.get("pitch_type")
+
+                # 순차 전진 — 캐시 pitch_count OCR 오독으로 잘못된 점프 방지
+                _bidx = min(_last_m + 1, len(pitches) - 1)
+
                 while len(_vpd_ts) <= _bidx:
                     _vpd_ts.append({})
                 _vpd_ts[_bidx]  = {"pitch_type": _stype, "speed": _sinfo.get("speed")}
                 _new_cidx_ts    = min(_bidx + 1, len(pitches) - 1)
                 _last_m         = _bidx
-                print(f"[싱크] 추정t={_vid_t:.1f}s 스캔t={_vtimes[_nsi]:.1f}s → MLB#{_bidx+1} {_stype} c_idx={_new_cidx_ts}")
+                print(f"[싱크] t={_vtimes[_nsi]:.1f}s → MLB#{_bidx+1} {_stype} c_idx={_new_cidx_ts}")
                 _nsi           += 1
                 _any_synced     = True
             if _any_synced:
@@ -1290,12 +1299,12 @@ with col_panel:
             _ev   = prev["events"] if prev["events"] not in ("nan", "None", "", None) else ""
             _ev_kor = _ev_map.get(_ev, _ev)
 
-            # 이전 예측 적중 여부
+            # 이전 예측 적중 여부 — prev(방금 던진 구)와 비교
             _prev_pred = ""
-            if c_idx > 0 and cur["pitch_type"]:
+            if c_idx > 0 and prev and prev.get("pitch_type"):
                 _pb = _bilstm_preds[c_idx - 1] if (c_idx - 1) < len(_bilstm_preds) else None
                 _prev_pred_type = _pb["next_pitch"] if _pb else _predict_next(pitches, c_idx - 1)["next_pitch"]
-                _hit = _prev_pred_type == cur["pitch_type"]
+                _hit = _prev_pred_type == prev["pitch_type"]
                 _prev_pred = (f'<span style="font-size:.65rem;color:{"#34d399" if _hit else "#f87171"};'
                               f'font-weight:700;margin-left:.4rem">{"✓ 예측 적중" if _hit else "✗ 빗나감"}</span>')
 
@@ -1410,8 +1419,8 @@ with col_panel:
 
 # ══ 하단 통계 ═════════════════════════════════════════════════════
 if loaded and c_idx > 0:
-    seen_so_far = pitches[:c_idx+1]
-    _tot  = c_idx + 1
+    seen_so_far = pitches[:c_idx]
+    _tot  = c_idx
     _ff   = sum(1 for p in seen_so_far if p["pitch_type"] in FASTBALLS)
     _br   = sum(1 for p in seen_so_far if p["pitch_type"] in BREAKING)
     _os   = sum(1 for p in seen_so_far if p["pitch_type"] in OFFSPEED)
@@ -1457,7 +1466,7 @@ _spoll_staleness = time.time() - _spoll_t_wall if _spoll_t_wall else 999
 if (_spoll_vtimes
         and _spoll_nsi < len(_spoll_vtimes)
         and _spoll_vid_t is not None
-        and _spoll_staleness < 300.0         # 5분 이상 업데이트 없으면 일시정지로 간주
-        and not st.session_state.get("_sixth_inning_alert", False)):
-    time.sleep(0.5)
+        and _spoll_staleness < 300.0):
+    # JS가 pitch_times를 직접 감지(200ms) → 폴링은 폴백용으로만 사용
+    time.sleep(1.0)
     st.rerun()

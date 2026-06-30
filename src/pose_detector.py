@@ -155,6 +155,7 @@ def scan_pitch_overlays(
     frame_idx    = skip_frame
     ocr_cfg_type = "--psm 6"
     ocr_cfg_speed = "--psm 6"
+    _pending_pcount_fill = False  # MPH 감지 후 다음 P:N 값으로 채워야 하는 상태
 
     while True:
         ret, frame = cap.read()
@@ -173,7 +174,7 @@ def scan_pitch_overlays(
             thumb    = cv2.resize(gr, (8, 4), interpolation=cv2.INTER_AREA)
             curr_hash = int(thumb.sum())
 
-            if abs(curr_hash - prev_hash) > 150 and t - prev_conf_t >= min_sep:
+            if abs(curr_hash - prev_hash) > 150:
                 # 변화 감지 → OCR
                 big = cv2.resize(gr, (gr.shape[1] * 6, gr.shape[0] * 6),
                                  interpolation=cv2.INTER_CUBIC)
@@ -183,13 +184,19 @@ def scan_pitch_overlays(
                 except Exception:
                     raw_s = ""
 
-                if "MPH" in raw_s:
-                    # 구속 파싱: 50-110mph 범위 숫자
+                if "MPH" in raw_s and t - prev_conf_t >= min_sep:
+                    # 이전 pending은 P:N 못 읽은 것 → pitch_count=None 유지
+                    _pending_pcount_fill = False
+
+                    # 구속 파싱: "94 MPH" 또는 "94.3→943" OCR 오독 보정
                     speed = None
-                    for m in _re.finditer(r"(\d{2,3})", raw_s):
+                    for m in _re.finditer(r"(\d+)", raw_s):
                         v = int(m.group(1))
-                        if 50 <= v <= 110:
+                        if 50 <= v <= 115:
                             speed = v
+                            break
+                        elif 500 <= v <= 1150:  # 소수점 누락 오독 (943 → 94.3mph)
+                            speed = round(v / 10)
                             break
 
                     # 구종 OCR: 어두운 박스 영역
@@ -210,12 +217,22 @@ def scan_pitch_overlays(
                             break
 
                     timestamps.append(t)
-                    pitch_data.append({"pitch_type": pitch_type, "speed": speed})
+                    pitch_data.append({"pitch_type": pitch_type, "speed": speed, "pitch_count": None})
                     prev_conf_t = t
+                    _pending_pcount_fill = True  # 다음 P:N 감지 시 채울 것
                     print(f"[OCR] {t:.1f}s → {pitch_type} {speed}mph")
 
                     if max_pitches > 0 and len(timestamps) >= max_pitches:
                         break
+
+                elif ("P:" in raw_s or "P;" in raw_s) and _pending_pcount_fill and pitch_data:
+                    # P:N 카운터 감지 → 직전 MPH의 pitch_count 채우기
+                    _pm = _re.search(r'P\s*[;:]\s*(\d+)', raw_s)
+                    if _pm:
+                        pcount = int(_pm.group(1))
+                        pitch_data[-1]["pitch_count"] = pcount
+                        _pending_pcount_fill = False
+                        print(f"[OCR] P:{pcount} 확인 → 타임스탬프 {timestamps[-1]:.1f}s 매핑")
 
             prev_hash = curr_hash
 
@@ -292,17 +309,20 @@ def ocr_check_pitch_overlay(
             pass
 
     if "MPH" not in raw_s:
-        return False, None, None
+        return False, None, None, None
 
     # 숫자 직접 추출 — OCR 오독 보정 (7→T/1, 9→I/g, 0→O)
     _norm = (raw_s.replace("T", "7").replace("I", "1").replace("l", "1")
                   .replace("O", "0").replace("G", "6").replace("S", "5")
                   .replace("|", "1").replace("g", "9"))
     speed = None
-    for m in _re.finditer(r"(\d{2,3})", _norm):
+    for m in _re.finditer(r"(\d+)", _norm):
         v = int(m.group(1))
-        if 50 <= v <= 110:
+        if 50 <= v <= 115:
             speed = v
+            break
+        elif 500 <= v <= 1150:  # 소수점 누락 오독 (943 → 94.3mph)
+            speed = round(v / 10)
             break
 
     # 구종 영역 OCR
@@ -322,7 +342,30 @@ def ocr_check_pitch_overlay(
             pitch_type = PITCH_MAP[kw]
             break
 
-    return True, pitch_type, speed
+    # P:N 카운터 읽기 — MPH 이후 2~4초 뒤 프레임에서 P:N 출현
+    pitch_count = None
+    for _ahead in [2.0, 3.0, 1.5, 4.0]:
+        _cap2 = cv2.VideoCapture(video_path)
+        _cap2.set(cv2.CAP_PROP_POS_FRAMES, int((check_time + _ahead) * fps))
+        _ret2, _fr2 = _cap2.read()
+        _cap2.release()
+        if not _ret2:
+            continue
+        _h2, _w2 = _fr2.shape[:2]
+        _sr2 = _fr2[int(_h2 * 0.769):int(_h2 * 0.800), int(_w2 * 0.875):_w2]
+        _gr2 = cv2.cvtColor(_sr2, cv2.COLOR_BGR2GRAY)
+        _big2 = cv2.resize(_gr2, (_gr2.shape[1] * 6, _gr2.shape[0] * 6), interpolation=cv2.INTER_CUBIC)
+        _, _b2 = cv2.threshold(_big2, 100, 255, cv2.THRESH_BINARY)
+        try:
+            _raw2 = pytesseract.image_to_string(_b2, config="--psm 7 --oem 3").upper().strip()
+        except Exception:
+            _raw2 = ""
+        _pm = _re.search(r'P\s*[;:]\s*(\d+)', _raw2)
+        if _pm:
+            pitch_count = int(_pm.group(1))
+            break
+
+    return True, pitch_type, speed, pitch_count
 
 
 def scan_video_pitches(
