@@ -1,0 +1,15 @@
+# Large data/video files
+data/raw/*.csv
+*.mp4
+streamlit_app/.yolo_cache/
+models/baseball_detector/
+*.pt
+*.h5
+*.pkl
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.env
+.DS_Store

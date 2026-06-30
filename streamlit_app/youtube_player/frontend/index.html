@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #000; }
+  #player { width: 100%; }
+</style>
+</head>
+<body>
+<div id="player"></div>
+
+<script>
+  function stReady() {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+  }
+  function stHeight(h) {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h }, "*");
+  }
+  function stValue(val) {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setComponentValue",
+      value: JSON.stringify(val),
+      dataType: "json"
+    }, "*");
+  }
+
+  var player        = null;
+  var pollInterval  = null;
+  var lastSeekTo    = -1;
+  var componentArgs = null;
+  var prevWantPlay  = null;
+  var lastSentPlaying = null;
+  var lastSentTime    = -999;
+
+  window.addEventListener("message", function(e) {
+    if (e.data.type !== "streamlit:render") return;
+    componentArgs = e.data.args;
+
+    if (componentArgs && componentArgs.video_id && !player) {
+      initPlayer(componentArgs.video_id, componentArgs.start_sec || 0);
+      return;
+    }
+
+    if (!player) return;
+
+    var st = componentArgs.seek_to;
+    if (st != null && st !== lastSeekTo) {
+      lastSeekTo = st;
+      try { player.seekTo(st, true); } catch(err) {}
+    }
+
+    var wantPlay = componentArgs.is_playing;
+    if (wantPlay !== prevWantPlay) {
+      prevWantPlay = wantPlay;
+      try {
+        if (wantPlay) { player.playVideo(); }
+        else          { player.pauseVideo(); }
+      } catch(err) {}
+    }
+  });
+
+  stReady();
+  stHeight(480);
+
+  var tag = document.createElement("script");
+  tag.src = "https://www.youtube.com/iframe_api";
+  document.head.appendChild(tag);
+
+  function initPlayer(videoId, startSec) {
+    player = new YT.Player("player", {
+      height: "480",
+      width: "100%",
+      videoId: videoId,
+      playerVars: {
+        start: Math.floor(startSec || 0),
+        rel: 0,
+        modestbranding: 1,
+        playsinline: 1
+      },
+      events: {
+        onReady: function() {
+          if (pollInterval) clearInterval(pollInterval);
+          pollInterval = setInterval(function() {
+            if (!player || !player.getCurrentTime) return;
+            try {
+              var t       = player.getCurrentTime();
+              var playing = player.getPlayerState() === 1;
+              var playingChanged = playing !== lastSentPlaying;
+              var timeChanged    = (t - lastSentTime) >= 0.5;
+
+              if (playingChanged || timeChanged) {
+                lastSentPlaying = playing;
+                lastSentTime    = t;
+                stValue({ time: t, playing: playing });
+              }
+            } catch(err) {}
+          }, 500);
+        },
+        onStateChange: function(ev) {
+          try {
+            var t       = player.getCurrentTime();
+            var playing = ev.data === 1;
+            lastSentPlaying = playing;
+            lastSentTime    = t;
+            stValue({ time: t, playing: playing });
+          } catch(err) {}
+        }
+      }
+    });
+  }
+
+  function onYouTubeIframeAPIReady() {
+    if (componentArgs && componentArgs.video_id) {
+      initPlayer(componentArgs.video_id, componentArgs.start_sec || 0);
+    }
+  }
+</script>
+</body>
+</html>
