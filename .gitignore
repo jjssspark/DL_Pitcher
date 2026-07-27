@@ -1,0 +1,34 @@
+# ── 대용량 원본 데이터 (재수집 가능하므로 버전관리 제외) ──
+data/raw/*.csv
+# Roboflow에서 재다운로드 가능 (src/train_yolo.py), 이미지 1000+개라 리포에서 제외
+data/yolo/
+*.mp4
+
+# ── 사전학습/실험용 체크포인트 & 학습 실행 산출물 (재다운로드·재학습 가능) ──
+yolov8n.pt
+yolov8n-pose.pt
+models/baseball_detector/
+models/baseball_detector-2/
+runs/
+
+# ── 서비스에 실제로 쓰이는 모델 파일은 Git LFS로 추적 (아래 예외 처리) ──
+*.pt
+*.h5
+*.pkl
+!models/pitch_predictor.h5
+!models/scaler.pkl
+!models/baseball_detector.pt
+
+# ── 앱 캐시 ──
+streamlit_app/.scan_cache/
+streamlit_app/.yolo_cache/
+streamlit_app/.bilstm_cache/
+
+# ── Python ──
+__pycache__/
+*.py[cod]
+venv/
+.env
+
+# ── OS ──
+.DS_Store

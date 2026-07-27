@@ -1,0 +1,5 @@
+# Git LFS로 추적하는 모델 파일 (Day 1: git-lfs를 로컬에서 설치한 뒤
+# `git add`로 추가해야 실제로 LFS 포인터로 커밋됩니다. docs/blog/day1.md 참고)
+models/pitch_predictor.h5 filter=lfs diff=lfs merge=lfs -text
+models/scaler.pkl filter=lfs diff=lfs merge=lfs -text
+models/baseball_detector.pt filter=lfs diff=lfs merge=lfs -text

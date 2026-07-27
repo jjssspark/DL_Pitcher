@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: transparent; }
+  video { width: 100%; display: block; }
+</style>
+</head>
+<body>
+<video id="vid" controls preload="auto"></video>
+
+<script>
+  function stReady() {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:componentReady", apiVersion: 1 }, "*");
+  }
+  function stHeight(h) {
+    window.parent.postMessage({ isStreamlitMessage: true, type: "streamlit:setFrameHeight", height: h }, "*");
+  }
+  function stValue(val) {
+    window.parent.postMessage({
+      isStreamlitMessage: true,
+      type: "streamlit:setComponentValue",
+      value: JSON.stringify(val),
+      dataType: "json"
+    }, "*");
+  }
+
+  var vid          = document.getElementById("vid");
+  var pollInterval = null;
+  var lastSeekTo   = -1;
+  var lastSentTime = -999;
+  var lastSentPlaying = null;
+  var initialized  = false;
+
+  window.addEventListener("message", function(e) {
+    if (e.data.type !== "streamlit:render") return;
+    var args = e.data.args;
+
+    if (!initialized && args.video_url) {
+      vid.src = args.video_url;
+      initialized = true;
+
+      if (pollInterval) clearInterval(pollInterval);
+      pollInterval = setInterval(function() {
+        var t = vid.currentTime;
+        var playing = !vid.paused && !vid.ended;
+        var timeChanged    = Math.abs(t - lastSentTime) >= 0.2;
+        var playingChanged = playing !== lastSentPlaying;
+        if (timeChanged || playingChanged) {
+          lastSentTime    = t;
+          lastSentPlaying = playing;
+          stValue({ time: t, playing: playing });
+        }
+      }, 200);
+    }
+
+    if (!args || !vid.src) return;
+
+    var st = args.seek_to;
+    if (st != null && Math.abs(st - lastSeekTo) > 0.5) {
+      lastSeekTo = st;
+      vid.currentTime = st;
+    }
+
+    var wantPlay = args.is_playing;
+    if (wantPlay && vid.paused)  { vid.play().catch(function(){}); }
+    if (!wantPlay && !vid.paused){ vid.pause(); }
+  });
+
+  stReady();
+  stHeight(480);
+</script>
+</body>
+</html>
