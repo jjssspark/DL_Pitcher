@@ -19,6 +19,14 @@ PitchIQ는 여기서 한발 더 나가 "다음엔 어떤 공을 던질까?"를 A
 MLB Statcast 데이터로 학습한 BiLSTM 모델이 다음 구종을 예측하고, YOLOv8 + 모션 감지로
 실제 중계 영상에서 투구 타이밍을 자동으로 찾아내 두 파이프라인을 하나의 Streamlit 서비스로 묶었습니다.
 
+## 🚀 Live Demo
+
+**[pitchiq-dlpitcher.streamlit.app](https://pitchiq-dlpitcher.streamlit.app/)**
+
+사이드바에 `game_pk`(예: `745735`)를 입력하면 실제 MLB Statcast 데이터를 불러와 다음 구종을 실시간으로 예측합니다.
+YouTube 영상 연동 · 실시간 스캔 기능은 무료 배포 환경(리소스 제약, 로컬 영상 서버 미노출)에서
+정상 동작하지 않을 수 있습니다 — 자세한 내용은 [Known Limitations](#-known-limitations) 참고.
+
 ## 🎯 Features
 
 - MLB Statcast 2025 시즌 전체 데이터 기반 학습
