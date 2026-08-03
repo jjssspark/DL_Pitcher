@@ -40,29 +40,63 @@ iframe{transition:none!important}
   border-radius:8px;padding:.3rem .65rem;font-size:.8rem;font-weight:700;color:#93c5fd;text-align:center}
 .count-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 2px}
 
-/* 패널 카드 */
+/* 패널 카드 — 타이포 확대 + hover glow */
 .panel{background:rgba(15,23,42,.7);border:1px solid rgba(59,130,246,.12);
-  border-radius:12px;padding:.85rem 1rem;margin-bottom:.6rem;backdrop-filter:blur(8px)}
-.panel-title{font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  color:#475569;margin-bottom:.5rem}
-.player-name{font-size:1rem;font-weight:800;color:#e2e8f0;line-height:1.1}
-.player-sub{font-size:.72rem;color:#64748b;margin-top:.12rem}
+  border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:.85rem;backdrop-filter:blur(8px);
+  transition:border-color .2s,transform .2s}
+.panel:hover{border-color:rgba(59,130,246,.35);transform:translateY(-2px)}
+.panel-title{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
+  color:#64748b;margin-bottom:.5rem}
+.player-name{font-size:1.15rem;font-weight:800;color:#e2e8f0;line-height:1.15}
+.player-sub{font-size:.8rem;color:#64748b;margin-top:.15rem}
 
 /* 구종 카드 */
-.pitch-card{border-radius:10px;padding:.7rem 1rem;margin-bottom:.5rem;
-  border:1px solid rgba(255,255,255,.06)}
-.pitch-code{font-size:2rem;font-weight:900;letter-spacing:-.02em;line-height:1}
-.pitch-name{font-size:.75rem;color:#94a3b8;margin-top:.08rem}
-.pitch-speed{font-size:.8rem;font-weight:700;color:#64748b;margin-top:.15rem}
+.pitch-card{border-radius:10px;padding:.95rem 1.25rem;margin-bottom:.6rem;
+  border:1px solid rgba(255,255,255,.06);transition:border-color .2s,transform .2s}
+.pitch-card:hover{transform:translateY(-2px)}
+.pitch-code{font-size:2.4rem;font-weight:900;letter-spacing:-.02em;line-height:1}
+.pitch-name{font-size:.85rem;color:#94a3b8;margin-top:.1rem}
+.pitch-speed{font-size:.9rem;font-weight:700;color:#64748b;margin-top:.18rem}
 
-/* 타임라인 행 */
-.pitch-row{display:flex;align-items:center;gap:.5rem;padding:.3rem .6rem;
-  border-radius:7px;margin-bottom:.18rem;font-size:.73rem}
+/* 타임라인 행 — hover 시 상세정보 노출 */
+.pitch-row{display:flex;align-items:center;gap:.5rem;padding:.4rem .7rem;
+  border-radius:7px;margin-bottom:.22rem;font-size:.82rem;transition:background .15s}
+.pitch-row-detail{max-height:0;opacity:0;overflow:hidden;font-size:.68rem;color:#64748b;
+  transition:max-height .2s ease,opacity .2s ease}
+.pitch-row:hover{background:rgba(59,130,246,.08)!important}
+.pitch-row:hover .pitch-row-detail{max-height:40px;opacity:1;margin-top:.15rem}
 .badge{display:inline-block;padding:.15rem .55rem;border-radius:999px;
-  font-size:.65rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
+  font-size:.7rem;font-weight:700;letter-spacing:.07em;text-transform:uppercase}
 .badge-actual{background:rgba(52,211,153,.15);color:#34d399;border:1px solid rgba(52,211,153,.3)}
 .badge-pred{background:rgba(167,139,250,.15);color:#a78bfa;border:1px solid rgba(167,139,250,.3)}
 .badge-sim{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
+
+/* 하단 통계 카드 — hover lift */
+.stat-card{background:rgba(15,23,42,.6);border:1px solid rgba(59,130,246,.1);
+  border-radius:10px;padding:.9rem 1.1rem;text-align:center;margin-bottom:.5rem;
+  transition:border-color .2s,transform .2s}
+.stat-card:hover{border-color:rgba(59,130,246,.4);transform:translateY(-3px)}
+
+/* 랜딩 히어로 */
+.hero-wrap{padding:2.4rem 1rem 1.6rem;text-align:center}
+.hero-title{font-size:2.6rem;font-weight:900;letter-spacing:-.02em;line-height:1.1;
+  background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text}
+.hero-tagline{font-size:1.05rem;color:#94a3b8;margin-top:.6rem}
+.hero-badge{display:inline-block;margin-top:1rem;padding:.4rem 1rem;border-radius:999px;
+  background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);color:#34d399;
+  font-size:.85rem;font-weight:700}
+.feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
+  gap:1rem;margin-top:2.2rem}
+.feature-card{background:rgba(15,23,42,.7);border:1px solid rgba(59,130,246,.14);
+  border-radius:14px;padding:1.4rem 1.2rem;text-align:left;transition:border-color .2s,transform .2s;
+  cursor:default}
+.feature-card:hover{border-color:rgba(167,139,250,.5);transform:translateY(-4px)}
+.feature-icon{font-size:1.8rem;margin-bottom:.5rem}
+.feature-title{font-size:1.02rem;font-weight:800;color:#e2e8f0}
+.feature-card-desc{max-height:0;opacity:0;overflow:hidden;font-size:.82rem;color:#94a3b8;
+  line-height:1.5;margin-top:0;transition:max-height .25s ease,opacity .25s ease,margin-top .25s ease}
+.feature-card:hover .feature-card-desc{max-height:120px;opacity:1;margin-top:.55rem}
 
 div[data-testid="stButton"]>button{
   background:linear-gradient(135deg,#1d4ed8,#6d28d9)!important;color:#fff!important;
