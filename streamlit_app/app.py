@@ -928,6 +928,37 @@ with st.sidebar:
             unsafe_allow_html=True)
 
 
+def _render_landing_hero() -> None:
+    st.markdown(
+        '<div class="hero-wrap">'
+        '<div class="hero-title">⚾ PitchIQ</div>'
+        '<div class="hero-tagline">MLB 실시간 투구 분석 & 다음 구종 예측 시스템</div>'
+        '<div class="hero-badge">🎯 BiLSTM 모델 정확도 48.5%</div>'
+        '<div class="feature-grid">'
+        '<div class="feature-card">'
+        '<div class="feature-icon">🧠</div>'
+        '<div class="feature-title">다음 구종 예측</div>'
+        '<div class="feature-card-desc">BiLSTM + 투수·타자 Embedding으로 직전 투구 흐름과 '
+        '경기 상황을 분석해 다음 구종을 실시간으로 예측합니다.</div>'
+        '</div>'
+        '<div class="feature-card">'
+        '<div class="feature-icon">🎬</div>'
+        '<div class="feature-title">실시간 영상 동기화</div>'
+        '<div class="feature-card-desc">YouTube 중계 영상을 불러오면 YOLOv8 + 모션 감지로 '
+        '투구 타이밍을 자동으로 찾아 예측과 동기화합니다.</div>'
+        '</div>'
+        '<div class="feature-card">'
+        '<div class="feature-icon">📊</div>'
+        '<div class="feature-title">구종 분포 분석</div>'
+        '<div class="feature-card-desc">투수별 이번 경기 구종 비율과 카운트별 성향을 '
+        '실시간으로 집계해 보여줍니다.</div>'
+        '</div>'
+        '</div>'
+        '</div>', unsafe_allow_html=True)
+    st.info("💡 왼쪽 사이드바에서 **game_pk**를 입력하고 경기 로드를 눌러보세요 — 예시: **745735** "
+            "(2024년 6월 8일 LAD @ NYY)", icon="⚾")
+
+
 # ══ 메인 헤더 ═════════════════════════════════════════════════════
 if loaded:
     cur  = pitches[c_idx]
@@ -974,13 +1005,7 @@ if loaded:
         f'</div></div>',
         unsafe_allow_html=True)
 else:
-    st.markdown(
-        '<div style="padding:.6rem 0 .5rem">'
-        '<div style="font-size:2rem;font-weight:900;background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399);'
-        '-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">⚾ PitchIQ</div>'
-        '<div style="font-size:.85rem;color:#475569;margin-top:.15rem">사이드바에서 경기를 로드하세요 (game_pk 입력)</div>'
-        '</div>', unsafe_allow_html=True)
-    st.info("💡 예시 — 2024년 6월 8일 LAD @ NYY : **game_pk = 745735**", icon="⚾")
+    _render_landing_hero()
 
 st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
 
@@ -1033,487 +1058,491 @@ if _pose_tid and _pose_tid in _pose_tasks:
         st.rerun()
 
 # ══ 메인 레이아웃 ═════════════════════════════════════════════════
-col_video, col_panel = st.columns([3.2, 1.2], gap="medium")
+if loaded:
+    col_video, col_panel = st.columns([3.2, 1.2], gap="medium")
+else:
+    col_video = col_panel = None
 
 # ── 왼쪽: 영상 + 내비게이션 ──────────────────────────────────────
-with col_video:
-    # YouTube URL인지 확인 후 iframe 임베드
-    import re as _re
-    _vsrc = st.session_state.video_src
-    def _yt_id(url):
-        if not url: return None
-        m = _re.search(r"(?:v=|youtu\.be/)([\w-]{11})", str(url))
-        return m.group(1) if m else None
+if loaded:
+    with col_video:
+        # YouTube URL인지 확인 후 iframe 임베드
+        import re as _re
+        _vsrc = st.session_state.video_src
+        def _yt_id(url):
+            if not url: return None
+            m = _re.search(r"(?:v=|youtu\.be/)([\w-]{11})", str(url))
+            return m.group(1) if m else None
 
-    _yt = _yt_id(_vsrc)
-    _local_play_path = st.session_state.get("_local_video_path")
-    _use_local_player = bool(_local_play_path and os.path.exists(_local_play_path))
+        _yt = _yt_id(_vsrc)
+        _local_play_path = st.session_state.get("_local_video_path")
+        _use_local_player = bool(_local_play_path and os.path.exists(_local_play_path))
 
-    # 로컬 파일 우선 → 스캔 캐시와 타임라인이 정확히 일치
-    # 로컬 없을 때만 YouTube 플레이어 폴백
-    if _use_local_player or _yt:
-        sys.path.insert(0, os.path.join(ROOT, "streamlit_app"))
-        _seek_to    = st.session_state.get("seek_to")
-        _is_playing = st.session_state.get("is_playing", False)
+        # 로컬 파일 우선 → 스캔 캐시와 타임라인이 정확히 일치
+        # 로컬 없을 때만 YouTube 플레이어 폴백
+        if _use_local_player or _yt:
+            sys.path.insert(0, os.path.join(ROOT, "streamlit_app"))
+            _seek_to    = st.session_state.get("seek_to")
+            _is_playing = st.session_state.get("is_playing", False)
 
-        if _use_local_player:
-            from local_video_player import local_video_player as _lvp
-            _vport     = _get_video_server(os.path.dirname(os.path.abspath(_local_play_path)))
-            _video_url = f"http://localhost:{_vport}/{os.path.basename(_local_play_path)}"
-            _yt_result = _lvp(video_url=_video_url, seek_to=_seek_to, is_playing=_is_playing, key="local_main")
+            if _use_local_player:
+                from local_video_player import local_video_player as _lvp
+                _vport     = _get_video_server(os.path.dirname(os.path.abspath(_local_play_path)))
+                _video_url = f"http://localhost:{_vport}/{os.path.basename(_local_play_path)}"
+                _yt_result = _lvp(video_url=_video_url, seek_to=_seek_to, is_playing=_is_playing, key="local_main")
+            else:
+                from youtube_player import youtube_player as _yt_player
+                _yt_result = _yt_player(video_id=_yt, start_sec=0, seek_to=_seek_to, is_playing=_is_playing, key="yt_main")
+
+            if _seek_to is not None:
+                st.session_state.seek_to = None
+
+            _yt_data             = _yt_result
+            _current_video_time  = None
+            _is_actually_playing = False
+
+            if isinstance(_yt_data, str):
+                try:
+                    _yt_data = json.loads(_yt_data)
+                except Exception:
+                    _yt_data = None
+            if isinstance(_yt_data, dict):
+                _current_video_time  = _yt_data.get("time")
+                _is_actually_playing = bool(_yt_data.get("playing", False))
+            elif isinstance(_yt_data, (int, float)):
+                _current_video_time  = float(_yt_data)
+
+            # 영상 시간/재생상태 세션 저장
+            if _current_video_time is not None:
+                st.session_state._vid_t       = _current_video_time
+                st.session_state._vid_t_wall  = time.time()   # 받은 벽시계 시각 기록
+            if isinstance(_yt_data, dict):
+                _pl = bool(_yt_data.get("playing", False))
+                st.session_state._vid_pl    = _pl
+                st.session_state.is_playing = _pl   # rerun 때마다 pauseVideo() 방지
+
+            _local_path = _local_play_path
+
+            # ── 타임스탬프 기반 자동 싱크 ──
+            _vtimes     = st.session_state.get("video_pitch_times", [])
+            _vraw       = st.session_state.get("_scan_raw_data", [])
+            _nsi        = st.session_state.get("_next_scan_idx", 0)
+            _vid_t_base = st.session_state.get("_vid_t")
+            _vid_t_wall = st.session_state.get("_vid_t_wall", 0.0)
+            _vid_pl     = st.session_state.get("_vid_pl", False)
+
+            # 현재 영상 시각
+            # - 컴포넌트 값이 오면 무조건 우선 사용
+            # - 없을 때: 재생 중이면 벽시계로 추정, 일시정지면 마지막 값 고정
+            # 벽시계 추정 제거 — YouTube가 보고한 마지막 시각만 사용
+            # (추정 시 버퍼링 중에도 앱 시간이 앞서 달려 미래 구까지 처리되는 문제 방지)
+            if _current_video_time is not None:
+                _vid_t = _current_video_time
+            elif _vid_t_base is not None:
+                _vid_t = _vid_t_base
+            else:
+                _vid_t = None
+
+            print(f"[SYNC] vid_t={_vid_t} nsi={_nsi} vtimes={len(_vtimes)} loaded={loaded} lpath={bool(_local_path)}")
+            if (_vid_t is not None and loaded and _nsi < len(_vtimes)):
+                _any_synced   = False
+                _vpd_ts       = list(st.session_state.get("video_pitch_data", []))
+                _last_m       = st.session_state.get("_last_ocr_mlb_idx", -1)
+                _new_cidx_ts  = st.session_state.get("current_pitch_idx", 0)
+                # _scan_time_offset: YouTube 타임라인 ≠ 스캔 캐시 타임라인일 때 보정값
+                _scan_offset = st.session_state.get("_scan_time_offset", 0.0)
+                _vid_t_adj   = _vid_t + _scan_offset
+                # 오버레이는 투구 종료 후 약 4.5초 후 감지 → 5.0초 앞당겨 투구 직후 싱크
+                if _nsi < len(_vtimes) and _vid_t_adj >= _vtimes[_nsi] - 5.0:
+                    _sinfo   = _vraw[_nsi] if _nsi < len(_vraw) else {}
+                    _stype   = _sinfo.get("pitch_type")
+
+                    # 순차 전진 — 캐시 pitch_count OCR 오독으로 잘못된 점프 방지
+                    _bidx = min(_last_m + 1, len(pitches) - 1)
+
+                    # 스캔 OCR 실패 시 MLB 데이터로 보완
+                    if not _stype and _bidx < len(pitches):
+                        _stype = pitches[_bidx].get("pitch_type")
+
+                    while len(_vpd_ts) <= _bidx:
+                        _vpd_ts.append({})
+                    _vpd_ts[_bidx]  = {"pitch_type": _stype, "speed": _sinfo.get("speed")}
+                    _new_cidx_ts    = min(_bidx + 1, len(pitches) - 1)
+                    _last_m         = _bidx
+                    print(f"[싱크] t={_vtimes[_nsi]:.1f}s → MLB#{_bidx+1} {_stype} c_idx={_new_cidx_ts}")
+                    _nsi           += 1
+                    _any_synced     = True
+                if _any_synced:
+                    st.session_state.video_pitch_data       = _vpd_ts
+                    st.session_state.current_pitch_idx      = _new_cidx_ts
+                    st.session_state._last_ocr_mlb_idx      = _last_m
+                    st.session_state._last_pitch_video_time = _vtimes[_nsi - 1]
+                    st.session_state._sync_activated        = True
+                    st.session_state._next_scan_idx         = _nsi
+                    if pitches[_new_cidx_ts]["inning"] >= 6:
+                        st.session_state._sixth_inning_alert = True
+                    st.rerun()
+
+            # ── 실시간 OCR 투구 감지 (항상 작동 — 사전 스캔 병행) ──
+            # _vid_t 기준으로 로컬 파일 프레임 직접 OCR → P: 증가 감지
+            _ocr_vid_t = _current_video_time if _current_video_time is not None else _vid_t
+            if (_ocr_vid_t is not None and loaded
+                    and _local_path and os.path.exists(_local_path)):
+                _last_check  = st.session_state.get("_pose_last_check_time", -99.0)
+                _last_pitch  = st.session_state.get("_last_pitch_video_time", -30.0)
+                _no_task     = not bool(st.session_state.get("_pose_task_id"))
+                _check_due   = (_ocr_vid_t - _last_check) >= 0.5
+                _cooldown_ok = (_ocr_vid_t - _last_pitch) >= 8.0
+                if _check_due and _cooldown_ok and _no_task:
+                    _new_tid = _start_ocr_check(_local_path, _ocr_vid_t)
+                    st.session_state._pose_task_id         = _new_tid
+                    st.session_state._pose_last_check_time = _ocr_vid_t
+        elif _vsrc:
+            _current_video_time = None
+            st.video(_vsrc)
         else:
-            from youtube_player import youtube_player as _yt_player
-            _yt_result = _yt_player(video_id=_yt, start_sec=0, seek_to=_seek_to, is_playing=_is_playing, key="yt_main")
+            _current_video_time = None
+            st.markdown(
+                '<div style="background:rgba(8,14,26,.9);border:1.5px dashed rgba(59,130,246,.2);'
+                'border-radius:12px;height:300px;display:flex;flex-direction:column;'
+                'align-items:center;justify-content:center;gap:.6rem">'
+                '<div style="font-size:2.8rem">🎬</div>'
+                '<div style="color:#334155;font-size:.85rem">사이드바에서 YouTube URL을 입력하거나 영상을 업로드하세요</div>'
+                '<div style="color:#1e293b;font-size:.72rem">YOLO가 자동으로 투구를 감지합니다</div>'
+                '</div>', unsafe_allow_html=True)
 
-        if _seek_to is not None:
-            st.session_state.seek_to = None
+        if loaded:
+            st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
 
-        _yt_data             = _yt_result
-        _current_video_time  = None
-        _is_actually_playing = False
+            _det_times   = st.session_state.get("detected_pitch_times", {})
+            _local_ready = bool(st.session_state.get("_local_video_path"))
 
-        if isinstance(_yt_data, str):
-            try:
-                _yt_data = json.loads(_yt_data)
-            except Exception:
-                _yt_data = None
-        if isinstance(_yt_data, dict):
-            _current_video_time  = _yt_data.get("time")
-            _is_actually_playing = bool(_yt_data.get("playing", False))
-        elif isinstance(_yt_data, (int, float)):
-            _current_video_time  = float(_yt_data)
-
-        # 영상 시간/재생상태 세션 저장
-        if _current_video_time is not None:
-            st.session_state._vid_t       = _current_video_time
-            st.session_state._vid_t_wall  = time.time()   # 받은 벽시계 시각 기록
-        if isinstance(_yt_data, dict):
-            _pl = bool(_yt_data.get("playing", False))
-            st.session_state._vid_pl    = _pl
-            st.session_state.is_playing = _pl   # rerun 때마다 pauseVideo() 방지
-
-        _local_path = _local_play_path
-
-        # ── 타임스탬프 기반 자동 싱크 ──
-        _vtimes     = st.session_state.get("video_pitch_times", [])
-        _vraw       = st.session_state.get("_scan_raw_data", [])
-        _nsi        = st.session_state.get("_next_scan_idx", 0)
-        _vid_t_base = st.session_state.get("_vid_t")
-        _vid_t_wall = st.session_state.get("_vid_t_wall", 0.0)
-        _vid_pl     = st.session_state.get("_vid_pl", False)
-
-        # 현재 영상 시각
-        # - 컴포넌트 값이 오면 무조건 우선 사용
-        # - 없을 때: 재생 중이면 벽시계로 추정, 일시정지면 마지막 값 고정
-        # 벽시계 추정 제거 — YouTube가 보고한 마지막 시각만 사용
-        # (추정 시 버퍼링 중에도 앱 시간이 앞서 달려 미래 구까지 처리되는 문제 방지)
-        if _current_video_time is not None:
-            _vid_t = _current_video_time
-        elif _vid_t_base is not None:
-            _vid_t = _vid_t_base
-        else:
-            _vid_t = None
-
-        print(f"[SYNC] vid_t={_vid_t} nsi={_nsi} vtimes={len(_vtimes)} loaded={loaded} lpath={bool(_local_path)}")
-        if (_vid_t is not None and loaded and _nsi < len(_vtimes)):
-            _any_synced   = False
-            _vpd_ts       = list(st.session_state.get("video_pitch_data", []))
-            _last_m       = st.session_state.get("_last_ocr_mlb_idx", -1)
-            _new_cidx_ts  = st.session_state.get("current_pitch_idx", 0)
-            # _scan_time_offset: YouTube 타임라인 ≠ 스캔 캐시 타임라인일 때 보정값
-            _scan_offset = st.session_state.get("_scan_time_offset", 0.0)
-            _vid_t_adj   = _vid_t + _scan_offset
-            # 오버레이는 투구 종료 후 약 4.5초 후 감지 → 5.0초 앞당겨 투구 직후 싱크
-            if _nsi < len(_vtimes) and _vid_t_adj >= _vtimes[_nsi] - 5.0:
-                _sinfo   = _vraw[_nsi] if _nsi < len(_vraw) else {}
-                _stype   = _sinfo.get("pitch_type")
-
-                # 순차 전진 — 캐시 pitch_count OCR 오독으로 잘못된 점프 방지
-                _bidx = min(_last_m + 1, len(pitches) - 1)
-
-                # 스캔 OCR 실패 시 MLB 데이터로 보완
-                if not _stype and _bidx < len(pitches):
-                    _stype = pitches[_bidx].get("pitch_type")
-
-                while len(_vpd_ts) <= _bidx:
-                    _vpd_ts.append({})
-                _vpd_ts[_bidx]  = {"pitch_type": _stype, "speed": _sinfo.get("speed")}
-                _new_cidx_ts    = min(_bidx + 1, len(pitches) - 1)
-                _last_m         = _bidx
-                print(f"[싱크] t={_vtimes[_nsi]:.1f}s → MLB#{_bidx+1} {_stype} c_idx={_new_cidx_ts}")
-                _nsi           += 1
-                _any_synced     = True
-            if _any_synced:
-                st.session_state.video_pitch_data       = _vpd_ts
-                st.session_state.current_pitch_idx      = _new_cidx_ts
-                st.session_state._last_ocr_mlb_idx      = _last_m
-                st.session_state._last_pitch_video_time = _vtimes[_nsi - 1]
-                st.session_state._sync_activated        = True
-                st.session_state._next_scan_idx         = _nsi
-                if pitches[_new_cidx_ts]["inning"] >= 6:
-                    st.session_state._sixth_inning_alert = True
+            if st.button("← 이전 투구 다시보기", use_container_width=True):
+                if c_idx > 0:
+                    st.session_state.current_pitch_idx -= 1
+                    c_idx -= 1
+                    _t = _det_times.get(c_idx)
+                    if _t is not None:
+                        st.session_state.seek_to = _t
+                st.session_state.video_synced = True
                 st.rerun()
 
-        # ── 실시간 OCR 투구 감지 (항상 작동 — 사전 스캔 병행) ──
-        # _vid_t 기준으로 로컬 파일 프레임 직접 OCR → P: 증가 감지
-        _ocr_vid_t = _current_video_time if _current_video_time is not None else _vid_t
-        if (_ocr_vid_t is not None and loaded
-                and _local_path and os.path.exists(_local_path)):
-            _last_check  = st.session_state.get("_pose_last_check_time", -99.0)
-            _last_pitch  = st.session_state.get("_last_pitch_video_time", -30.0)
-            _no_task     = not bool(st.session_state.get("_pose_task_id"))
-            _check_due   = (_ocr_vid_t - _last_check) >= 0.5
-            _cooldown_ok = (_ocr_vid_t - _last_pitch) >= 8.0
-            if _check_due and _cooldown_ok and _no_task:
-                _new_tid = _start_ocr_check(_local_path, _ocr_vid_t)
-                st.session_state._pose_task_id         = _new_tid
-                st.session_state._pose_last_check_time = _ocr_vid_t
-    elif _vsrc:
-        _current_video_time = None
-        st.video(_vsrc)
-    else:
-        _current_video_time = None
-        st.markdown(
-            '<div style="background:rgba(8,14,26,.9);border:1.5px dashed rgba(59,130,246,.2);'
-            'border-radius:12px;height:300px;display:flex;flex-direction:column;'
-            'align-items:center;justify-content:center;gap:.6rem">'
-            '<div style="font-size:2.8rem">🎬</div>'
-            '<div style="color:#334155;font-size:.85rem">사이드바에서 YouTube URL을 입력하거나 영상을 업로드하세요</div>'
-            '<div style="color:#1e293b;font-size:.72rem">YOLO가 자동으로 투구를 감지합니다</div>'
-            '</div>', unsafe_allow_html=True)
-
-    if loaded:
-        st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
-
-        _det_times   = st.session_state.get("detected_pitch_times", {})
-        _local_ready = bool(st.session_state.get("_local_video_path"))
-
-        if st.button("← 이전 투구 다시보기", use_container_width=True):
-            if c_idx > 0:
-                st.session_state.current_pitch_idx -= 1
-                c_idx -= 1
-                _t = _det_times.get(c_idx)
-                if _t is not None:
-                    st.session_state.seek_to = _t
-            st.session_state.video_synced = True
-            st.rerun()
-
-        _pose_active = bool(st.session_state.get("_pose_task_id"))
-        _scan_st_note = st.session_state.get("_scan_status", "idle")
-        if st.session_state.get("_download_task_id"):
-            _sync_note = "⬇ 영상 다운로드 중..."
-        elif _scan_st_note == "scanning":
-            _sync_note = "⏳ 영상 분석 중..."
-        elif _scan_st_note == "done":
-            _sync_note = "✅ 싱크 준비 완료 — 재생하면 자동 감지"
-        elif _pose_active:
-            _sync_note = "🔍 투구 모션 감지 중..."
-        elif not _local_ready:
-            _sync_note = "YouTube URL을 입력하세요"
-        else:
-            _sync_note = ""
-        _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | " if st.session_state.get("_sync_activated") else ""
-        if _sync_note:
-            st.caption(f"{_pitch_label}{_sync_note}")
-
-        # 슬라이더 (투구 타임라인)
-        st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
-        sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0), c_idx,
-                        label_visibility="collapsed")
-        if sel != c_idx:
-            st.session_state.current_pitch_idx = sel
-            st.session_state.video_synced = True
-            st.rerun()
-
-        # 최근 투구 리스트
-        st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
-        _start = max(0, c_idx - 7)
-        for _r in reversed(pitches[_start: c_idx] if c_idx > 0 else []):
-            _pt  = _r["pitch_type"] or "—"
-            _m   = PITCH_META.get(_pt, PITCH_META["OTHER"])
-            _spd = f'{_r["release_speed"]:.1f}' if _r["release_speed"] else "—"
-            _is_c = _r["pitch_idx"] == c_idx
-            _bg  = "rgba(59,130,246,.1)" if _is_c else "rgba(8,14,26,.6)"
-            _bdr = "1px solid rgba(59,130,246,.3)" if _is_c else "1px solid rgba(148,163,184,.07)"
-            _ev  = _r["events"] if _r["events"] and _r["events"] not in ("nan", "None", "") else ""
-            _ev_html = f' <span style="color:#34d399;font-size:.65rem">[{_ev}]</span>' if _ev else ""
-            st.markdown(
-                f'<div class="pitch-row" style="background:{_bg};border:{_bdr}">'
-                f'<span style="color:#475569;width:1.4rem;font-size:.68rem;font-weight:{"700" if _is_c else "400"}">'
-                f'#{_r["pitch_idx"]+1}</span>'
-                f'<span style="font-weight:700;color:{_m["color"]};width:2.8rem">{_m["emoji"]} {_pt}</span>'
-                f'<span style="color:#64748b;font-size:.68rem">{_spd} mph</span>'
-                f'<span style="color:#64748b;font-size:.65rem;margin-left:auto">'
-                f'{_r["inning_topbot"][0]}{_r["inning"]}회 {_r["balls"]}-{_r["strikes"]}'
-                f'{_ev_html}</span>'
-                f'</div>', unsafe_allow_html=True)
-
-
-# ── 오른쪽: 경기 상황 패널 ────────────────────────────────────────
-with col_panel:
-    if not loaded:
-        st.markdown(
-            '<div style="height:400px;display:flex;align-items:center;justify-content:center;'
-            'color:#334155;font-size:.85rem;border:1px dashed rgba(59,130,246,.1);border-radius:12px">'
-            '경기를 먼저 로드하세요</div>', unsafe_allow_html=True)
-    else:
-        cur  = pitches[c_idx]
-        prev = pitches[c_idx - 1] if c_idx > 0 else None
-
-        # ── 투수 / 타자 교체 알림 (티빙 스타일) ──────────────────
-        if prev is not None:
-            _pitcher_changed = prev["pitcher_id"] != cur["pitcher_id"]
-            _batter_changed  = (not _pitcher_changed) and (prev["at_bat"] != cur["at_bat"])
-        else:
-            _pitcher_changed = False
-            _batter_changed  = False
-
-        if _pitcher_changed:
-            _old_p = prev["pitcher_name"].split(",")[0] if prev else "—"
-            _new_p = cur["pitcher_name"].split(",")[0]
-            _new_hand = cur["pitcher_hand"]
-            st.markdown(
-                f'<div style="background:linear-gradient(135deg,rgba(26,10,46,.95),rgba(13,31,60,.95));'
-                f'border:1px solid rgba(167,139,250,.55);border-radius:12px;padding:.75rem 1rem;'
-                f'margin-bottom:.55rem">'
-                f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
-                f'color:#a78bfa;margin-bottom:.3rem">🔄 투수 교체</div>'
-                f'<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap">'
-                f'<span style="color:#94a3b8;font-size:.82rem;text-decoration:line-through">{_old_p}</span>'
-                f'<span style="color:#475569;font-size:1rem;font-weight:300">→</span>'
-                f'<span style="color:#60a5fa;font-weight:800;font-size:.95rem">{_new_p}</span>'
-                f'<span style="background:rgba(96,165,250,.15);color:#93c5fd;border:1px solid rgba(96,165,250,.3);'
-                f'border-radius:999px;padding:.1rem .45rem;font-size:.6rem;font-weight:700">{_new_hand}투</span>'
-                f'</div></div>',
-                unsafe_allow_html=True)
-        elif _batter_changed:
-            _new_b    = cur["batter_name"]
-            _new_bh   = cur["batter_hand"]
-            _bat_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
-            st.markdown(
-                f'<div style="background:rgba(15,23,42,.8);border:1px solid rgba(52,211,153,.35);'
-                f'border-radius:12px;padding:.65rem 1rem;margin-bottom:.55rem">'
-                f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
-                f'color:#34d399;margin-bottom:.25rem">⚾ 타자 교체</div>'
-                f'<div style="font-size:.95rem;font-weight:800;color:#e2e8f0">{_new_b}</div>'
-                f'<div style="font-size:.65rem;color:#64748b;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
-                f'</div>',
-                unsafe_allow_html=True)
-
-        # ── 투수 / 타자 정보 ──
-        batting_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
-        st.markdown(
-            f'<div class="panel">'
-            f'<div class="panel-title">투수 · 타자</div>'
-            f'<div style="display:flex;gap:.6rem;margin-bottom:.5rem">'
-            f'<div style="flex:1">'
-            f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">투수</div>'
-            f'<div style="font-size:.88rem;font-weight:800;color:#60a5fa">{cur["pitcher_name"]}</div>'
-            f'<div style="font-size:.65rem;color:#475569">투구폼 {cur["pitcher_hand"]}</div>'
-            f'</div>'
-            f'<div style="flex:1">'
-            f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">타자 ({batting_team})</div>'
-            f'<div style="font-size:.88rem;font-weight:800;color:#e2e8f0">{cur["batter_name"]}</div>'
-            f'<div style="font-size:.65rem;color:#475569">{cur["batter_hand"]}타</div>'
-            f'</div></div>'
-            # 주자 다이아몬드
-            f'<div style="display:flex;align-items:center;gap:.8rem">'
-            f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"])}'
-            f'<div style="font-size:.68rem;color:#64748b;line-height:1.8">'
-            f'{"🟡 1루" if cur["on_1b"] else "○ 1루"}<br>'
-            f'{"🟡 2루" if cur["on_2b"] else "○ 2루"}<br>'
-            f'{"🟡 3루" if cur["on_3b"] else "○ 3루"}'
-            f'</div></div></div>',
-            unsafe_allow_html=True)
-
-        # ── 현재 타석 상황 (투구 결과 실시간) ──
-        _bilstm_preds = st.session_state.get("bilstm_preds", [])
-
-        # 이번 타석에서 던진 투구 목록 (현재 at_bat 기준)
-        _cur_ab  = cur["at_bat"]
-        _ab_pitches = [p for p in pitches[:c_idx] if p["at_bat"] == _cur_ab]
-        _ab_pitch_n = len(_ab_pitches)  # 이번 타석 누적 투구 수
-
-        _desc_map = {
-            "called_strike":    ("스트라이크", "#ef4444"),
-            "swinging_strike":  ("헛스윙",     "#ef4444"),
-            "swinging_strike_blocked": ("헛스윙(블)", "#f87171"),
-            "ball":             ("볼",          "#3b82f6"),
-            "blocked_ball":     ("블로킹볼",    "#3b82f6"),
-            "foul":             ("파울",        "#fbbf24"),
-            "foul_tip":         ("파울팁",      "#fbbf24"),
-            "hit_into_play":    ("인플레이",    "#34d399"),
-        }
-        _ev_map = {
-            "strikeout":      "삼진 아웃", "home_run":     "홈런",
-            "single":         "1루타",     "double":       "2루타",
-            "triple":         "3루타",     "walk":         "볼넷",
-            "hit_by_pitch":   "사구",      "field_out":    "아웃",
-            "grounded_into_double_play": "병살타", "force_out": "포스 아웃",
-            "sac_fly":        "희생플라이", "sac_bunt":     "희생번트",
-        }
-
-        # 이번 타석 투구 결과 점들
-        if _ab_pitches:
-            _dots_html = ""
-            for _ap in _ab_pitches:
-                _dinfo = _desc_map.get(_ap["description"], ("", "#475569"))
-                _dot_c = _dinfo[1]
-                _dots_html += (
-                    f'<span title="{_dinfo[0]}" style="display:inline-block;width:9px;height:9px;'
-                    f'border-radius:50%;background:{_dot_c};margin-right:3px"></span>'
-                )
-            st.markdown(
-                f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
-                f'<span style="font-size:.6rem;color:#475569;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
-                f'<div>{_dots_html}</div>'
-                f'</div>',
-                unsafe_allow_html=True)
-
-        # ── 방금 던진 구종 ──
-        st.markdown('<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
-
-        _vpd = st.session_state.get("video_pitch_data", [])
-        _ocr_i = c_idx - 1 if c_idx > 0 else -1
-        _ocr_d = _vpd[_ocr_i] if 0 <= _ocr_i < len(_vpd) else {}
-        _OCR_TO_CODE_DISP = {
-            "Knuckle Curve": "KC", "Curveball": "CU", "4-Seam Fastball": "FF",
-            "Fastball": "FF", "Sinker": "SI", "2-Seam Fastball": "SI",
-            "Slider": "SL", "Sweeper": "ST", "Changeup": "CH",
-            "Cutter": "FC", "Splitter": "FS", "Knuckleball": "KN",
-        }
-        _ocr_type_str  = _ocr_d.get("pitch_type") if isinstance(_ocr_d, dict) else None
-        _ocr_speed_val = _ocr_d.get("speed")       if isinstance(_ocr_d, dict) else None
-        _display_code  = (_OCR_TO_CODE_DISP.get(_ocr_type_str, prev["pitch_type"] if prev else "OTHER")
-                          if _ocr_type_str else (prev["pitch_type"] if prev else "OTHER"))
-        _api_speed     = prev["release_speed"] if prev else None
-        _spd_val       = _ocr_speed_val or _api_speed
-        _spd           = f'{_spd_val:.0f} mph' if _spd_val else "—"
-
-        if prev and _display_code:
-            _m    = PITCH_META.get(_display_code, PITCH_META["OTHER"])
-            _desc_raw  = prev.get("description", "")
-            _desc_info = _desc_map.get(_desc_raw, (_desc_raw, "#64748b"))
-            _desc_kor, _desc_col = _desc_info
-            _ev   = prev["events"] if prev["events"] not in ("nan", "None", "", None) else ""
-            _ev_kor = _ev_map.get(_ev, _ev)
-
-            # 이전 예측 적중 여부 — prev(방금 던진 구)와 비교
-            _prev_pred = ""
-            if c_idx > 0 and prev and prev.get("pitch_type"):
-                _pb = _bilstm_preds[c_idx - 1] if (c_idx - 1) < len(_bilstm_preds) else None
-                _prev_pred_type = _pb["next_pitch"] if _pb else _predict_next(pitches, c_idx - 1)["next_pitch"]
-                _hit = _prev_pred_type == prev["pitch_type"]
-                _prev_pred = (f'<span style="font-size:.65rem;color:{"#34d399" if _hit else "#f87171"};'
-                              f'font-weight:700;margin-left:.4rem">{"✓ 예측 적중" if _hit else "✗ 빗나감"}</span>')
-
-            st.markdown(
-                f'<div class="pitch-card" style="background:rgba(15,23,42,.6);border-color:{_m["color"]}44">'
-                f'<div style="display:flex;align-items:center;gap:.8rem">'
-                f'<div style="font-size:2.2rem;line-height:1">{_m["emoji"]}</div>'
-                f'<div style="flex:1">'
-                f'<div class="pitch-code" style="color:{_m["color"]}">{_display_code}</div>'
-                f'<div class="pitch-name">{_ocr_type_str or _m["name"]}</div>'
-                f'<div style="margin-top:.2rem;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem">'
-                f'<span style="color:#64748b;font-size:.78rem;font-weight:600">{_spd}</span>'
-                f'<span style="background:{_desc_col}22;color:{_desc_col};border:1px solid {_desc_col}44;'
-                f'border-radius:999px;padding:.08rem .4rem;font-size:.6rem;font-weight:700">{_desc_kor}</span>'
-                + (f'<span style="color:#34d399;font-size:.65rem;font-weight:700">[{_ev_kor}]</span>' if _ev_kor else "")
-                + (_prev_pred)
-                + f'</div></div></div></div>',
-                unsafe_allow_html=True)
-        else:
-            st.markdown(
-                '<div class="pitch-card" style="min-height:70px;display:flex;align-items:center;'
-                'justify-content:center;background:rgba(8,14,26,.5);border-color:rgba(59,130,246,.1)">'
-                '<span style="color:#334155;font-size:.8rem">⚾ 경기 로드 후 재생</span></div>',
-                unsafe_allow_html=True)
-
-        # ── 다음 구종 예측 ──
-        if True:
-            _bilstm_res = _bilstm_preds[c_idx] if c_idx < len(_bilstm_preds) else None
-            if _bilstm_res:
-                pred      = _bilstm_res
-                src_badge = '<span class="badge badge-pred">BiLSTM</span>'
+            _pose_active = bool(st.session_state.get("_pose_task_id"))
+            _scan_st_note = st.session_state.get("_scan_status", "idle")
+            if st.session_state.get("_download_task_id"):
+                _sync_note = "⬇ 영상 다운로드 중..."
+            elif _scan_st_note == "scanning":
+                _sync_note = "⏳ 영상 분석 중..."
+            elif _scan_st_note == "done":
+                _sync_note = "✅ 싱크 준비 완료 — 재생하면 자동 감지"
+            elif _pose_active:
+                _sync_note = "🔍 투구 모션 감지 중..."
+            elif not _local_ready:
+                _sync_note = "YouTube URL을 입력하세요"
             else:
-                pred      = _predict_next(pitches, c_idx)
-                src_badge = '<span class="badge badge-sim">통계</span>'
+                _sync_note = ""
+            _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | " if st.session_state.get("_sync_activated") else ""
+            if _sync_note:
+                st.caption(f"{_pitch_label}{_sync_note}")
 
-            _nc  = pred["next_pitch"]
-            _nm  = PITCH_META.get(_nc, PITCH_META["OTHER"])
-            _cf  = pred["confidence"]
-            _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
+            # 슬라이더 (투구 타임라인)
+            st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
+            sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0), c_idx,
+                            label_visibility="collapsed")
+            if sel != c_idx:
+                st.session_state.current_pitch_idx = sel
+                st.session_state.video_synced = True
+                st.rerun()
 
+            # 최근 투구 리스트
+            st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
+            _start = max(0, c_idx - 7)
+            for _r in reversed(pitches[_start: c_idx] if c_idx > 0 else []):
+                _pt  = _r["pitch_type"] or "—"
+                _m   = PITCH_META.get(_pt, PITCH_META["OTHER"])
+                _spd = f'{_r["release_speed"]:.1f}' if _r["release_speed"] else "—"
+                _is_c = _r["pitch_idx"] == c_idx
+                _bg  = "rgba(59,130,246,.1)" if _is_c else "rgba(8,14,26,.6)"
+                _bdr = "1px solid rgba(59,130,246,.3)" if _is_c else "1px solid rgba(148,163,184,.07)"
+                _ev  = _r["events"] if _r["events"] and _r["events"] not in ("nan", "None", "") else ""
+                _ev_html = f' <span style="color:#34d399;font-size:.65rem">[{_ev}]</span>' if _ev else ""
+                st.markdown(
+                    f'<div class="pitch-row" style="background:{_bg};border:{_bdr}">'
+                    f'<span style="color:#475569;width:1.4rem;font-size:.68rem;font-weight:{"700" if _is_c else "400"}">'
+                    f'#{_r["pitch_idx"]+1}</span>'
+                    f'<span style="font-weight:700;color:{_m["color"]};width:2.8rem">{_m["emoji"]} {_pt}</span>'
+                    f'<span style="color:#64748b;font-size:.68rem">{_spd} mph</span>'
+                    f'<span style="color:#64748b;font-size:.65rem;margin-left:auto">'
+                    f'{_r["inning_topbot"][0]}{_r["inning"]}회 {_r["balls"]}-{_r["strikes"]}'
+                    f'{_ev_html}</span>'
+                    f'</div>', unsafe_allow_html=True)
+
+
+    # ── 오른쪽: 경기 상황 패널 ────────────────────────────────────────
+    with col_panel:
+        if not loaded:
             st.markdown(
-                f'<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;'
-                f'text-transform:uppercase;color:#64748b;margin:.2rem 0 .35rem">'
-                f'다음 투구 예측 {src_badge}</div>',
-                unsafe_allow_html=True)
+                '<div style="height:400px;display:flex;align-items:center;justify-content:center;'
+                'color:#334155;font-size:.85rem;border:1px dashed rgba(59,130,246,.1);border-radius:12px">'
+                '경기를 먼저 로드하세요</div>', unsafe_allow_html=True)
+        else:
+            cur  = pitches[c_idx]
+            prev = pitches[c_idx - 1] if c_idx > 0 else None
+
+            # ── 투수 / 타자 교체 알림 (티빙 스타일) ──────────────────
+            if prev is not None:
+                _pitcher_changed = prev["pitcher_id"] != cur["pitcher_id"]
+                _batter_changed  = (not _pitcher_changed) and (prev["at_bat"] != cur["at_bat"])
+            else:
+                _pitcher_changed = False
+                _batter_changed  = False
+
+            if _pitcher_changed:
+                _old_p = prev["pitcher_name"].split(",")[0] if prev else "—"
+                _new_p = cur["pitcher_name"].split(",")[0]
+                _new_hand = cur["pitcher_hand"]
+                st.markdown(
+                    f'<div style="background:linear-gradient(135deg,rgba(26,10,46,.95),rgba(13,31,60,.95));'
+                    f'border:1px solid rgba(167,139,250,.55);border-radius:12px;padding:.75rem 1rem;'
+                    f'margin-bottom:.55rem">'
+                    f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
+                    f'color:#a78bfa;margin-bottom:.3rem">🔄 투수 교체</div>'
+                    f'<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap">'
+                    f'<span style="color:#94a3b8;font-size:.82rem;text-decoration:line-through">{_old_p}</span>'
+                    f'<span style="color:#475569;font-size:1rem;font-weight:300">→</span>'
+                    f'<span style="color:#60a5fa;font-weight:800;font-size:.95rem">{_new_p}</span>'
+                    f'<span style="background:rgba(96,165,250,.15);color:#93c5fd;border:1px solid rgba(96,165,250,.3);'
+                    f'border-radius:999px;padding:.1rem .45rem;font-size:.6rem;font-weight:700">{_new_hand}투</span>'
+                    f'</div></div>',
+                    unsafe_allow_html=True)
+            elif _batter_changed:
+                _new_b    = cur["batter_name"]
+                _new_bh   = cur["batter_hand"]
+                _bat_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
+                st.markdown(
+                    f'<div style="background:rgba(15,23,42,.8);border:1px solid rgba(52,211,153,.35);'
+                    f'border-radius:12px;padding:.65rem 1rem;margin-bottom:.55rem">'
+                    f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
+                    f'color:#34d399;margin-bottom:.25rem">⚾ 타자 교체</div>'
+                    f'<div style="font-size:.95rem;font-weight:800;color:#e2e8f0">{_new_b}</div>'
+                    f'<div style="font-size:.65rem;color:#64748b;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+            # ── 투수 / 타자 정보 ──
+            batting_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
             st.markdown(
-                f'<div class="pitch-card" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
-                f'rgba(46,27,75,.4));border-color:rgba(167,139,250,.3)">'
-                f'<div style="display:flex;align-items:center;gap:.8rem">'
-                f'<div style="font-size:2.2rem;line-height:1">{_nm["emoji"]}</div>'
+                f'<div class="panel">'
+                f'<div class="panel-title">투수 · 타자</div>'
+                f'<div style="display:flex;gap:.6rem;margin-bottom:.5rem">'
                 f'<div style="flex:1">'
-                f'<div class="pitch-code" style="color:{_nm["color"]}">{_nc}</div>'
-                f'<div class="pitch-name">{_nm["name"]}</div>'
-                f'<div style="margin-top:.2rem">'
-                f'<span style="color:{_cc};font-size:1.05rem;font-weight:800">{_cf:.0%}</span>'
-                f'<span style="color:#475569;font-size:.65rem;margin-left:.2rem">신뢰도</span>'
-                f'</div></div></div></div>',
+                f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">투수</div>'
+                f'<div style="font-size:.88rem;font-weight:800;color:#60a5fa">{cur["pitcher_name"]}</div>'
+                f'<div style="font-size:.65rem;color:#475569">투구폼 {cur["pitcher_hand"]}</div>'
+                f'</div>'
+                f'<div style="flex:1">'
+                f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">타자 ({batting_team})</div>'
+                f'<div style="font-size:.88rem;font-weight:800;color:#e2e8f0">{cur["batter_name"]}</div>'
+                f'<div style="font-size:.65rem;color:#475569">{cur["batter_hand"]}타</div>'
+                f'</div></div>'
+                # 주자 다이아몬드
+                f'<div style="display:flex;align-items:center;gap:.8rem">'
+                f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"])}'
+                f'<div style="font-size:.68rem;color:#64748b;line-height:1.8">'
+                f'{"🟡 1루" if cur["on_1b"] else "○ 1루"}<br>'
+                f'{"🟡 2루" if cur["on_2b"] else "○ 2루"}<br>'
+                f'{"🟡 3루" if cur["on_3b"] else "○ 3루"}'
+                f'</div></div></div>',
                 unsafe_allow_html=True)
 
-            # 구종별 예측 확률 바
-            probs  = pred["probabilities"]
-            codes  = [c for c in probs if probs[c] > 0.005]
-            codes  = sorted(codes, key=lambda c: -probs[c])[:7]
-            vals   = [probs[c] for c in codes]
-            colors = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in codes]
-            labels = [f'{c}<br><span style="font-size:7px">{PITCH_META.get(c,PITCH_META["OTHER"])["name"]}</span>' for c in codes]
+            # ── 현재 타석 상황 (투구 결과 실시간) ──
+            _bilstm_preds = st.session_state.get("bilstm_preds", [])
 
-            fig = go.Figure(go.Bar(
-                x=labels, y=vals,
-                marker=dict(color=colors, opacity=0.82,
-                            line=dict(color="rgba(255,255,255,.04)", width=1)),
-                text=[f"{v:.0%}" for v in vals], textposition="outside",
-                textfont=dict(size=8, color="#94a3b8"),
-            ))
-            fig.update_layout(
-                paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                margin=dict(l=0, r=0, t=10, b=0), height=140, showlegend=False,
-                xaxis=dict(tickfont=dict(size=7, color="#64748b"),
-                           gridcolor="rgba(0,0,0,0)", zeroline=False),
-                yaxis=dict(tickformat=".0%", tickfont=dict(size=7, color="#475569"),
-                           gridcolor="rgba(148,163,184,.04)", zeroline=False,
-                           range=[0, max(vals) * 1.4 if vals else 1]),
-            )
-            st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+            # 이번 타석에서 던진 투구 목록 (현재 at_bat 기준)
+            _cur_ab  = cur["at_bat"]
+            _ab_pitches = [p for p in pitches[:c_idx] if p["at_bat"] == _cur_ab]
+            _ab_pitch_n = len(_ab_pitches)  # 이번 타석 누적 투구 수
 
-        # 투수 이번 경기 구종 분포 (누적)
-        if c_idx >= 3:
-            seen = [p for p in pitches[:c_idx+1]
-                    if p["pitcher_id"] == cur["pitcher_id"] and p["pitch_type"]]
-            if seen:
-                cnt   = Counter(p["pitch_type"] for p in seen)
-                _pc   = list(cnt.keys())
-                _pv   = [cnt[c] for c in _pc]
-                _pcol = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in _pc]
-                _plab = [f'{c} {PITCH_META.get(c,PITCH_META["OTHER"])["name"]}' for c in _pc]
-                fig2  = go.Figure(go.Pie(
-                    labels=_plab, values=_pv,
-                    marker=dict(colors=_pcol, line=dict(color="#080e1a", width=2)),
-                    hole=0.55, textinfo="label+percent",
-                    textfont=dict(size=7.5, color="#94a3b8"),
-                    hovertemplate="%{label}: %{value}구 (%{percent})<extra></extra>",
+            _desc_map = {
+                "called_strike":    ("스트라이크", "#ef4444"),
+                "swinging_strike":  ("헛스윙",     "#ef4444"),
+                "swinging_strike_blocked": ("헛스윙(블)", "#f87171"),
+                "ball":             ("볼",          "#3b82f6"),
+                "blocked_ball":     ("블로킹볼",    "#3b82f6"),
+                "foul":             ("파울",        "#fbbf24"),
+                "foul_tip":         ("파울팁",      "#fbbf24"),
+                "hit_into_play":    ("인플레이",    "#34d399"),
+            }
+            _ev_map = {
+                "strikeout":      "삼진 아웃", "home_run":     "홈런",
+                "single":         "1루타",     "double":       "2루타",
+                "triple":         "3루타",     "walk":         "볼넷",
+                "hit_by_pitch":   "사구",      "field_out":    "아웃",
+                "grounded_into_double_play": "병살타", "force_out": "포스 아웃",
+                "sac_fly":        "희생플라이", "sac_bunt":     "희생번트",
+            }
+
+            # 이번 타석 투구 결과 점들
+            if _ab_pitches:
+                _dots_html = ""
+                for _ap in _ab_pitches:
+                    _dinfo = _desc_map.get(_ap["description"], ("", "#475569"))
+                    _dot_c = _dinfo[1]
+                    _dots_html += (
+                        f'<span title="{_dinfo[0]}" style="display:inline-block;width:9px;height:9px;'
+                        f'border-radius:50%;background:{_dot_c};margin-right:3px"></span>'
+                    )
+                st.markdown(
+                    f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
+                    f'<span style="font-size:.6rem;color:#475569;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
+                    f'<div>{_dots_html}</div>'
+                    f'</div>',
+                    unsafe_allow_html=True)
+
+            # ── 방금 던진 구종 ──
+            st.markdown('<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
+
+            _vpd = st.session_state.get("video_pitch_data", [])
+            _ocr_i = c_idx - 1 if c_idx > 0 else -1
+            _ocr_d = _vpd[_ocr_i] if 0 <= _ocr_i < len(_vpd) else {}
+            _OCR_TO_CODE_DISP = {
+                "Knuckle Curve": "KC", "Curveball": "CU", "4-Seam Fastball": "FF",
+                "Fastball": "FF", "Sinker": "SI", "2-Seam Fastball": "SI",
+                "Slider": "SL", "Sweeper": "ST", "Changeup": "CH",
+                "Cutter": "FC", "Splitter": "FS", "Knuckleball": "KN",
+            }
+            _ocr_type_str  = _ocr_d.get("pitch_type") if isinstance(_ocr_d, dict) else None
+            _ocr_speed_val = _ocr_d.get("speed")       if isinstance(_ocr_d, dict) else None
+            _display_code  = (_OCR_TO_CODE_DISP.get(_ocr_type_str, prev["pitch_type"] if prev else "OTHER")
+                              if _ocr_type_str else (prev["pitch_type"] if prev else "OTHER"))
+            _api_speed     = prev["release_speed"] if prev else None
+            _spd_val       = _ocr_speed_val or _api_speed
+            _spd           = f'{_spd_val:.0f} mph' if _spd_val else "—"
+
+            if prev and _display_code:
+                _m    = PITCH_META.get(_display_code, PITCH_META["OTHER"])
+                _desc_raw  = prev.get("description", "")
+                _desc_info = _desc_map.get(_desc_raw, (_desc_raw, "#64748b"))
+                _desc_kor, _desc_col = _desc_info
+                _ev   = prev["events"] if prev["events"] not in ("nan", "None", "", None) else ""
+                _ev_kor = _ev_map.get(_ev, _ev)
+
+                # 이전 예측 적중 여부 — prev(방금 던진 구)와 비교
+                _prev_pred = ""
+                if c_idx > 0 and prev and prev.get("pitch_type"):
+                    _pb = _bilstm_preds[c_idx - 1] if (c_idx - 1) < len(_bilstm_preds) else None
+                    _prev_pred_type = _pb["next_pitch"] if _pb else _predict_next(pitches, c_idx - 1)["next_pitch"]
+                    _hit = _prev_pred_type == prev["pitch_type"]
+                    _prev_pred = (f'<span style="font-size:.65rem;color:{"#34d399" if _hit else "#f87171"};'
+                                  f'font-weight:700;margin-left:.4rem">{"✓ 예측 적중" if _hit else "✗ 빗나감"}</span>')
+
+                st.markdown(
+                    f'<div class="pitch-card" style="background:rgba(15,23,42,.6);border-color:{_m["color"]}44">'
+                    f'<div style="display:flex;align-items:center;gap:.8rem">'
+                    f'<div style="font-size:2.2rem;line-height:1">{_m["emoji"]}</div>'
+                    f'<div style="flex:1">'
+                    f'<div class="pitch-code" style="color:{_m["color"]}">{_display_code}</div>'
+                    f'<div class="pitch-name">{_ocr_type_str or _m["name"]}</div>'
+                    f'<div style="margin-top:.2rem;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem">'
+                    f'<span style="color:#64748b;font-size:.78rem;font-weight:600">{_spd}</span>'
+                    f'<span style="background:{_desc_col}22;color:{_desc_col};border:1px solid {_desc_col}44;'
+                    f'border-radius:999px;padding:.08rem .4rem;font-size:.6rem;font-weight:700">{_desc_kor}</span>'
+                    + (f'<span style="color:#34d399;font-size:.65rem;font-weight:700">[{_ev_kor}]</span>' if _ev_kor else "")
+                    + (_prev_pred)
+                    + f'</div></div></div></div>',
+                    unsafe_allow_html=True)
+            else:
+                st.markdown(
+                    '<div class="pitch-card" style="min-height:70px;display:flex;align-items:center;'
+                    'justify-content:center;background:rgba(8,14,26,.5);border-color:rgba(59,130,246,.1)">'
+                    '<span style="color:#334155;font-size:.8rem">⚾ 경기 로드 후 재생</span></div>',
+                    unsafe_allow_html=True)
+
+            # ── 다음 구종 예측 ──
+            if True:
+                _bilstm_res = _bilstm_preds[c_idx] if c_idx < len(_bilstm_preds) else None
+                if _bilstm_res:
+                    pred      = _bilstm_res
+                    src_badge = '<span class="badge badge-pred">BiLSTM</span>'
+                else:
+                    pred      = _predict_next(pitches, c_idx)
+                    src_badge = '<span class="badge badge-sim">통계</span>'
+
+                _nc  = pred["next_pitch"]
+                _nm  = PITCH_META.get(_nc, PITCH_META["OTHER"])
+                _cf  = pred["confidence"]
+                _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
+
+                st.markdown(
+                    f'<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;'
+                    f'text-transform:uppercase;color:#64748b;margin:.2rem 0 .35rem">'
+                    f'다음 투구 예측 {src_badge}</div>',
+                    unsafe_allow_html=True)
+                st.markdown(
+                    f'<div class="pitch-card" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
+                    f'rgba(46,27,75,.4));border-color:rgba(167,139,250,.3)">'
+                    f'<div style="display:flex;align-items:center;gap:.8rem">'
+                    f'<div style="font-size:2.2rem;line-height:1">{_nm["emoji"]}</div>'
+                    f'<div style="flex:1">'
+                    f'<div class="pitch-code" style="color:{_nm["color"]}">{_nc}</div>'
+                    f'<div class="pitch-name">{_nm["name"]}</div>'
+                    f'<div style="margin-top:.2rem">'
+                    f'<span style="color:{_cc};font-size:1.05rem;font-weight:800">{_cf:.0%}</span>'
+                    f'<span style="color:#475569;font-size:.65rem;margin-left:.2rem">신뢰도</span>'
+                    f'</div></div></div></div>',
+                    unsafe_allow_html=True)
+
+                # 구종별 예측 확률 바
+                probs  = pred["probabilities"]
+                codes  = [c for c in probs if probs[c] > 0.005]
+                codes  = sorted(codes, key=lambda c: -probs[c])[:7]
+                vals   = [probs[c] for c in codes]
+                colors = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in codes]
+                labels = [f'{c}<br><span style="font-size:7px">{PITCH_META.get(c,PITCH_META["OTHER"])["name"]}</span>' for c in codes]
+
+                fig = go.Figure(go.Bar(
+                    x=labels, y=vals,
+                    marker=dict(color=colors, opacity=0.82,
+                                line=dict(color="rgba(255,255,255,.04)", width=1)),
+                    text=[f"{v:.0%}" for v in vals], textposition="outside",
+                    textfont=dict(size=8, color="#94a3b8"),
                 ))
-                fig2.update_layout(
+                fig.update_layout(
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    margin=dict(l=0, r=0, t=4, b=0), height=170, showlegend=False,
-                    annotations=[dict(text=f"<b>{sum(_pv)}</b><br>구", x=0.5, y=0.5,
-                                      font=dict(size=11, color="#e2e8f0"), showarrow=False)],
+                    margin=dict(l=0, r=0, t=10, b=0), height=140, showlegend=False,
+                    xaxis=dict(tickfont=dict(size=7, color="#64748b"),
+                               gridcolor="rgba(0,0,0,0)", zeroline=False),
+                    yaxis=dict(tickformat=".0%", tickfont=dict(size=7, color="#475569"),
+                               gridcolor="rgba(148,163,184,.04)", zeroline=False,
+                               range=[0, max(vals) * 1.4 if vals else 1]),
                 )
-                st.markdown(f'<p style="font-size:.62rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.15rem 0 .1rem">{cur["pitcher_name"].split(",")[0]} 구종 분포</p>', unsafe_allow_html=True)
-                st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
+                st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
+
+            # 투수 이번 경기 구종 분포 (누적)
+            if c_idx >= 3:
+                seen = [p for p in pitches[:c_idx+1]
+                        if p["pitcher_id"] == cur["pitcher_id"] and p["pitch_type"]]
+                if seen:
+                    cnt   = Counter(p["pitch_type"] for p in seen)
+                    _pc   = list(cnt.keys())
+                    _pv   = [cnt[c] for c in _pc]
+                    _pcol = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in _pc]
+                    _plab = [f'{c} {PITCH_META.get(c,PITCH_META["OTHER"])["name"]}' for c in _pc]
+                    fig2  = go.Figure(go.Pie(
+                        labels=_plab, values=_pv,
+                        marker=dict(colors=_pcol, line=dict(color="#080e1a", width=2)),
+                        hole=0.55, textinfo="label+percent",
+                        textfont=dict(size=7.5, color="#94a3b8"),
+                        hovertemplate="%{label}: %{value}구 (%{percent})<extra></extra>",
+                    ))
+                    fig2.update_layout(
+                        paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
+                        margin=dict(l=0, r=0, t=4, b=0), height=170, showlegend=False,
+                        annotations=[dict(text=f"<b>{sum(_pv)}</b><br>구", x=0.5, y=0.5,
+                                          font=dict(size=11, color="#e2e8f0"), showarrow=False)],
+                    )
+                    st.markdown(f'<p style="font-size:.62rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.15rem 0 .1rem">{cur["pitcher_name"].split(",")[0]} 구종 분포</p>', unsafe_allow_html=True)
+                    st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
 
 # ══ 하단 통계 ═════════════════════════════════════════════════════
