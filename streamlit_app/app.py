@@ -705,12 +705,12 @@ if loaded:
 with st.sidebar:
     st.markdown(
         '<div style="padding:.8rem 0 .4rem">'
-        '<div style="font-size:1.35rem;font-weight:900;background:linear-gradient(135deg,#60a5fa,#a78bfa);'
+        '<div style="font-size:1.5rem;font-weight:900;background:linear-gradient(135deg,#60a5fa,#a78bfa);'
         '-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">⚾ PitchIQ</div>'
-        '<div style="font-size:.68rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
+        '<div style="font-size:.78rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
         '</div>', unsafe_allow_html=True)
 
-    st.markdown('<p style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 로드</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 로드</p>', unsafe_allow_html=True)
     gk_input = st.text_input("Baseball Savant game_pk", value=st.session_state.game_pk,
                               placeholder="예: 745735", label_visibility="collapsed")
     load_col, clear_col = st.columns(2)
@@ -762,21 +762,21 @@ with st.sidebar:
     if _bstatus == "computing":
         st.markdown(
             '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);'
-            'border-radius:8px;padding:.4rem .7rem;font-size:.72rem;color:#fbbf24;margin-top:.3rem">'
+            'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#fbbf24;margin-top:.3rem">'
             '⏳ BiLSTM 계산 중... (통계 예측 사용 중)</div>',
             unsafe_allow_html=True)
     elif _bstatus == "done":
         _bcnt = sum(1 for p in st.session_state.get("bilstm_preds", []) if p is not None)
         st.markdown(
             f'<div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);'
-            f'border-radius:8px;padding:.4rem .7rem;font-size:.72rem;color:#a78bfa;margin-top:.3rem">'
+            f'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#a78bfa;margin-top:.3rem">'
             f'✅ BiLSTM {_bcnt}구 적용됨</div>',
             unsafe_allow_html=True)
 
     st.divider()
 
     # 영상 업로드
-    st.markdown('<p style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 영상</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 영상</p>', unsafe_allow_html=True)
     yt_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...",
                            label_visibility="collapsed")
     if yt_url.strip() and yt_url.strip() != getattr(st.session_state, "_yt_url", ""):
@@ -797,14 +797,14 @@ with st.sidebar:
         st.rerun()
 
     if st.session_state.video_src:
-        st.markdown(f'<p style="font-size:.7rem;color:#34d399">✓ {str(st.session_state.video_src)[:50]}</p>', unsafe_allow_html=True)
+        st.markdown(f'<p style="font-size:.8rem;color:#34d399">✓ {str(st.session_state.video_src)[:50]}</p>', unsafe_allow_html=True)
 
     # 다운로드 상태
     _dl_tid = st.session_state.get("_download_task_id")
     if _dl_tid and _dl_tid in _pose_tasks:
         _dl_task = _pose_tasks[_dl_tid]
         if _dl_task["status"] == "downloading":
-            st.markdown('<p style="font-size:.7rem;color:#fbbf24">⬇ 영상 다운로드 중...</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.8rem;color:#fbbf24">⬇ 영상 다운로드 중...</p>', unsafe_allow_html=True)
         elif _dl_task["status"] == "done":
             _vpath = _dl_task["video_path"]
             st.session_state._local_video_path  = _vpath
@@ -841,27 +841,27 @@ with st.sidebar:
                     st.session_state._scan_status  = "scanning"
             st.rerun()
         elif _dl_task["status"] == "error":
-            st.markdown(f'<p style="font-size:.7rem;color:#f87171">⚠ 다운로드 실패: {_dl_task.get("error","")[:40]}</p>', unsafe_allow_html=True)
+            st.markdown(f'<p style="font-size:.8rem;color:#f87171">⚠ 다운로드 실패: {_dl_task.get("error","")[:40]}</p>', unsafe_allow_html=True)
 
     if st.session_state._local_video_path and st.session_state.video_src:
         _scan_st = st.session_state.get("_scan_status", "idle")
         if _scan_st == "scanning":
             st.markdown(
                 '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);'
-                'border-radius:8px;padding:.4rem .7rem;font-size:.72rem;color:#fbbf24;margin-top:.25rem">'
+                'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#fbbf24;margin-top:.25rem">'
                 '⏳ 1~5이닝 분석 중... (6회초 도달 시 자동 종료)</div>',
                 unsafe_allow_html=True)
         elif _scan_st == "done":
             _n_found = len(st.session_state.get("video_pitch_times", []))
             st.markdown(
                 f'<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);'
-                f'border-radius:8px;padding:.4rem .7rem;font-size:.72rem;color:#34d399;margin-top:.25rem">'
+                f'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#34d399;margin-top:.25rem">'
                 f'✅ 영상 싱크 완료 — {_n_found}개 투구 감지</div>',
                 unsafe_allow_html=True)
         elif _scan_st == "error":
-            st.markdown('<p style="font-size:.7rem;color:#f87171;margin-top:.2rem">⚠ 영상 분석 실패</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.8rem;color:#f87171;margin-top:.2rem">⚠ 영상 분석 실패</p>', unsafe_allow_html=True)
         else:
-            st.markdown('<p style="font-size:.7rem;color:#94a3b8">대기 중</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.8rem;color:#94a3b8">대기 중</p>', unsafe_allow_html=True)
 
         # 싱크 상태
         _sa     = st.session_state.get("_sync_activated", False)
@@ -869,7 +869,7 @@ with st.sidebar:
         _ocr_cnt = len([v for v in st.session_state.get("video_pitch_data", []) if v and isinstance(v, dict)])
         _cur_offset = st.session_state.get("_scan_time_offset", 0.0)
         st.markdown(
-            f'<div style="font-size:.65rem;color:#475569;margin-top:.3rem;line-height:1.9">'
+            f'<div style="font-size:.75rem;color:#475569;margin-top:.3rem;line-height:1.9">'
             f'싱크: {_sa_txt}<br>'
             f'감지된 투구: {_ocr_cnt}구 | 현재: #{c_idx+1 if _sa else "—"} / {len(pitches)}<br>'
             f'오프셋: {_cur_offset:+.1f}s'
@@ -878,7 +878,7 @@ with st.sidebar:
         # 타임라인 보정 — YouTube 영상 타임라인이 스캔 캐시와 다를 때
         _vtimes_sb = st.session_state.get("video_pitch_times", [])
         if _vtimes_sb:
-            st.markdown('<p style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin:.5rem 0 .3rem">타임라인 보정</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin:.5rem 0 .3rem">타임라인 보정</p>', unsafe_allow_html=True)
             _calib_n = st.number_input("현재 영상이 몇 구?", min_value=1, max_value=len(_vtimes_sb),
                                        value=1, step=1, label_visibility="visible",
                                        key="_calib_pitch_n")
@@ -900,13 +900,13 @@ with st.sidebar:
     # 경기 진행 요약 (로드된 경우)
     if loaded:
         cur = pitches[c_idx]
-        st.markdown('<p style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.4rem">경기 현황</p>', unsafe_allow_html=True)
+        st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.4rem">경기 현황</p>', unsafe_allow_html=True)
         half = "▲" if cur["inning_topbot"] == "Top" else "▼"
         _away_s = cur["away_score"]
         _home_s = cur["home_score"]
         _diff   = _away_s - _home_s
         st.markdown(
-            f'<div style="font-size:.76rem;line-height:2.1;color:#64748b">'
+            f'<div style="font-size:.85rem;line-height:2.1;color:#64748b">'
             f'<div>{cur["away_team"]} <span style="color:#e2e8f0;font-weight:700">{_away_s}</span>'
             f' : <span style="color:#e2e8f0;font-weight:700">{_home_s}</span> {cur["home_team"]}</div>'
             f'<div>이닝 <span style="color:#93c5fd;font-weight:700">{half} {cur["inning"]}회</span></div>'
@@ -917,11 +917,11 @@ with st.sidebar:
         st.divider()
 
     # 구종 범례
-    st.markdown('<p style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">구종 범례</p>', unsafe_allow_html=True)
+    st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">구종 범례</p>', unsafe_allow_html=True)
     for _c, _m in list(PITCH_META.items())[:10]:
         if _c == "OTHER": continue
         st.markdown(
-            f'<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;font-size:.7rem">'
+            f'<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;font-size:.8rem">'
             f'<div style="width:7px;height:7px;border-radius:50%;background:{_m["color"]};flex-shrink:0"></div>'
             f'<span style="color:#64748b;width:2rem">{_c}</span>'
             f'<span style="color:#475569">{_m["name"]}</span></div>',
