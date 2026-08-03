@@ -1474,7 +1474,7 @@ if loaded:
                 _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
 
                 st.markdown(
-                    f'<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;'
+                    f'<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;'
                     f'text-transform:uppercase;color:#64748b;margin:.2rem 0 .35rem">'
                     f'다음 투구 예측 {src_badge}</div>',
                     unsafe_allow_html=True)
@@ -1487,8 +1487,8 @@ if loaded:
                     f'<div class="pitch-code" style="color:{_nm["color"]}">{_nc}</div>'
                     f'<div class="pitch-name">{_nm["name"]}</div>'
                     f'<div style="margin-top:.2rem">'
-                    f'<span style="color:{_cc};font-size:1.05rem;font-weight:800">{_cf:.0%}</span>'
-                    f'<span style="color:#475569;font-size:.65rem;margin-left:.2rem">신뢰도</span>'
+                    f'<span style="color:{_cc};font-size:1.2rem;font-weight:800">{_cf:.0%}</span>'
+                    f'<span style="color:#475569;font-size:.72rem;margin-left:.2rem">신뢰도</span>'
                     f'</div></div></div></div>',
                     unsafe_allow_html=True)
 
@@ -1500,12 +1500,15 @@ if loaded:
                 colors = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in codes]
                 labels = [f'{c}<br><span style="font-size:7px">{PITCH_META.get(c,PITCH_META["OTHER"])["name"]}</span>' for c in codes]
 
+                _pitch_kor_names = [PITCH_META.get(c, PITCH_META["OTHER"])["name"] for c in codes]
                 fig = go.Figure(go.Bar(
                     x=labels, y=vals,
                     marker=dict(color=colors, opacity=0.82,
                                 line=dict(color="rgba(255,255,255,.04)", width=1)),
                     text=[f"{v:.0%}" for v in vals], textposition="outside",
                     textfont=dict(size=8, color="#94a3b8"),
+                    customdata=list(zip(codes, _pitch_kor_names)),
+                    hovertemplate="<b>%{customdata[0]} %{customdata[1]}</b><br>확률: %{y:.1%}<extra></extra>",
                 ))
                 fig.update_layout(
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
