@@ -68,14 +68,23 @@ MLB Statcast 데이터로 학습한 BiLSTM 모델이 다음 구종을 예측하�
 
 ## 📈 Model Performance
 
-| Model | Accuracy |
-|---|---|
-| Random Guess (8-class) | 12.5% |
-| Initial LSTM | 39% |
-| **Final BiLSTM (Embedding + 투수 성향 피처)** | **46.14%** |
+| Model | Accuracy | Macro F1 |
+|---|---|---|
+| Random Guess (8-class) | 12.5% | - |
+| Initial LSTM | 39% | - |
+| BiLSTM (Embedding + 투수 성향 피처, seq_len=5) | 46.14% | 39.2% |
+| **BiLSTM (Embedding + 투수 성향 피처, seq_len=3) — 현재 모델** | **48.5%** | **43.4%** |
+
+Day 2에서 시퀀스 길이(3/5/8)와 클래스 불균형 보정(class weight) 실험을 진행했고, `seq_len=3`이
+가장 안정적으로 좋은 결과를 보여 기본값으로 채택했습니다. 실험 과정과 트레이드오프는
+[`docs/blog/day2.md`](docs/blog/day2.md)에 정리했습니다.
 
 혼동행렬·클래스별 정확도는 `python src/evaluate.py` 실행 후 `notebooks/figures/`에서 확인할 수 있습니다.
-(정확도 개선 실험은 Day 2에서 진행 중 — 진행 상황은 블로그 참고)
+
+<p align="center">
+  <img src="notebooks/figures/07_confusion_matrix.png" width="49%" />
+  <img src="notebooks/figures/08_accuracy_by_class.png" width="49%" />
+</p>
 
 ## 📂 Project Structure
 
