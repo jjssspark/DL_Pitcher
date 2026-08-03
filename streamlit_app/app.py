@@ -1246,7 +1246,7 @@ if loaded:
                 st.caption(f"{_pitch_label}{_sync_note}")
 
             # 슬라이더 (투구 타임라인)
-            st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
             sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0), c_idx,
                             label_visibility="collapsed")
             if sel != c_idx:
@@ -1255,8 +1255,13 @@ if loaded:
                 st.rerun()
 
             # 최근 투구 리스트
-            st.markdown('<p style="font-size:.63rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
             _start = max(0, c_idx - 7)
+            _row_desc_map = {
+                "called_strike": "스트라이크", "swinging_strike": "헛스윙",
+                "swinging_strike_blocked": "헛스윙(블)", "ball": "볼", "blocked_ball": "블로킹볼",
+                "foul": "파울", "foul_tip": "파울팁", "hit_into_play": "인플레이",
+            }
             for _r in reversed(pitches[_start: c_idx] if c_idx > 0 else []):
                 _pt  = _r["pitch_type"] or "—"
                 _m   = PITCH_META.get(_pt, PITCH_META["OTHER"])
@@ -1266,8 +1271,11 @@ if loaded:
                 _bdr = "1px solid rgba(59,130,246,.3)" if _is_c else "1px solid rgba(148,163,184,.07)"
                 _ev  = _r["events"] if _r["events"] and _r["events"] not in ("nan", "None", "") else ""
                 _ev_html = f' <span style="color:#34d399;font-size:.65rem">[{_ev}]</span>' if _ev else ""
+                _row_batter = _r["batter_name"].split(",")[0] if _r.get("batter_name") else "—"
+                _row_desc   = _row_desc_map.get(_r.get("description"), _r.get("description") or "—")
                 st.markdown(
                     f'<div class="pitch-row" style="background:{_bg};border:{_bdr}">'
+                    f'<div style="display:flex;align-items:center;gap:.5rem;width:100%">'
                     f'<span style="color:#475569;width:1.4rem;font-size:.68rem;font-weight:{"700" if _is_c else "400"}">'
                     f'#{_r["pitch_idx"]+1}</span>'
                     f'<span style="font-weight:700;color:{_m["color"]};width:2.8rem">{_m["emoji"]} {_pt}</span>'
@@ -1275,6 +1283,8 @@ if loaded:
                     f'<span style="color:#64748b;font-size:.65rem;margin-left:auto">'
                     f'{_r["inning_topbot"][0]}{_r["inning"]}회 {_r["balls"]}-{_r["strikes"]}'
                     f'{_ev_html}</span>'
+                    f'</div>'
+                    f'<div class="pitch-row-detail">타자 {_row_batter} · {_row_desc}</div>'
                     f'</div>', unsafe_allow_html=True)
 
 
