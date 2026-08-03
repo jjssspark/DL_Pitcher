@@ -1305,14 +1305,14 @@ if loaded:
                     f'<div style="background:linear-gradient(135deg,rgba(26,10,46,.95),rgba(13,31,60,.95));'
                     f'border:1px solid rgba(167,139,250,.55);border-radius:12px;padding:.75rem 1rem;'
                     f'margin-bottom:.55rem">'
-                    f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
+                    f'<div style="font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
                     f'color:#a78bfa;margin-bottom:.3rem">🔄 투수 교체</div>'
                     f'<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap">'
-                    f'<span style="color:#94a3b8;font-size:.82rem;text-decoration:line-through">{_old_p}</span>'
+                    f'<span style="color:#94a3b8;font-size:.9rem;text-decoration:line-through">{_old_p}</span>'
                     f'<span style="color:#475569;font-size:1rem;font-weight:300">→</span>'
-                    f'<span style="color:#60a5fa;font-weight:800;font-size:.95rem">{_new_p}</span>'
+                    f'<span style="color:#60a5fa;font-weight:800;font-size:1.05rem">{_new_p}</span>'
                     f'<span style="background:rgba(96,165,250,.15);color:#93c5fd;border:1px solid rgba(96,165,250,.3);'
-                    f'border-radius:999px;padding:.1rem .45rem;font-size:.6rem;font-weight:700">{_new_hand}투</span>'
+                    f'border-radius:999px;padding:.1rem .45rem;font-size:.68rem;font-weight:700">{_new_hand}투</span>'
                     f'</div></div>',
                     unsafe_allow_html=True)
             elif _batter_changed:
@@ -1322,10 +1322,10 @@ if loaded:
                 st.markdown(
                     f'<div style="background:rgba(15,23,42,.8);border:1px solid rgba(52,211,153,.35);'
                     f'border-radius:12px;padding:.65rem 1rem;margin-bottom:.55rem">'
-                    f'<div style="font-size:.6rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
+                    f'<div style="font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
                     f'color:#34d399;margin-bottom:.25rem">⚾ 타자 교체</div>'
-                    f'<div style="font-size:.95rem;font-weight:800;color:#e2e8f0">{_new_b}</div>'
-                    f'<div style="font-size:.65rem;color:#64748b;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
+                    f'<div style="font-size:1.05rem;font-weight:800;color:#e2e8f0">{_new_b}</div>'
+                    f'<div style="font-size:.72rem;color:#64748b;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
                     f'</div>',
                     unsafe_allow_html=True)
 
@@ -1336,19 +1336,19 @@ if loaded:
                 f'<div class="panel-title">투수 · 타자</div>'
                 f'<div style="display:flex;gap:.6rem;margin-bottom:.5rem">'
                 f'<div style="flex:1">'
-                f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">투수</div>'
-                f'<div style="font-size:.88rem;font-weight:800;color:#60a5fa">{cur["pitcher_name"]}</div>'
-                f'<div style="font-size:.65rem;color:#475569">투구폼 {cur["pitcher_hand"]}</div>'
+                f'<div style="font-size:.68rem;color:#475569;margin-bottom:.1rem">투수</div>'
+                f'<div style="font-size:1rem;font-weight:800;color:#60a5fa">{cur["pitcher_name"]}</div>'
+                f'<div style="font-size:.72rem;color:#475569">투구폼 {cur["pitcher_hand"]}</div>'
                 f'</div>'
                 f'<div style="flex:1">'
-                f'<div style="font-size:.6rem;color:#475569;margin-bottom:.1rem">타자 ({batting_team})</div>'
-                f'<div style="font-size:.88rem;font-weight:800;color:#e2e8f0">{cur["batter_name"]}</div>'
-                f'<div style="font-size:.65rem;color:#475569">{cur["batter_hand"]}타</div>'
+                f'<div style="font-size:.68rem;color:#475569;margin-bottom:.1rem">타자 ({batting_team})</div>'
+                f'<div style="font-size:1rem;font-weight:800;color:#e2e8f0">{cur["batter_name"]}</div>'
+                f'<div style="font-size:.72rem;color:#475569">{cur["batter_hand"]}타</div>'
                 f'</div></div>'
                 # 주자 다이아몬드
                 f'<div style="display:flex;align-items:center;gap:.8rem">'
                 f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"])}'
-                f'<div style="font-size:.68rem;color:#64748b;line-height:1.8">'
+                f'<div style="font-size:.75rem;color:#64748b;line-height:1.8">'
                 f'{"🟡 1루" if cur["on_1b"] else "○ 1루"}<br>'
                 f'{"🟡 2루" if cur["on_2b"] else "○ 2루"}<br>'
                 f'{"🟡 3루" if cur["on_3b"] else "○ 3루"}'
@@ -1394,13 +1394,13 @@ if loaded:
                     )
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
-                    f'<span style="font-size:.6rem;color:#475569;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
+                    f'<span style="font-size:.68rem;color:#475569;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
                     f'<div>{_dots_html}</div>'
                     f'</div>',
                     unsafe_allow_html=True)
 
             # ── 방금 던진 구종 ──
-            st.markdown('<div class="panel-title" style="font-size:.62rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
 
             _vpd = st.session_state.get("video_pitch_data", [])
             _ocr_i = c_idx - 1 if c_idx > 0 else -1
@@ -1433,7 +1433,7 @@ if loaded:
                     _pb = _bilstm_preds[c_idx - 1] if (c_idx - 1) < len(_bilstm_preds) else None
                     _prev_pred_type = _pb["next_pitch"] if _pb else _predict_next(pitches, c_idx - 1)["next_pitch"]
                     _hit = _prev_pred_type == prev["pitch_type"]
-                    _prev_pred = (f'<span style="font-size:.65rem;color:{"#34d399" if _hit else "#f87171"};'
+                    _prev_pred = (f'<span style="font-size:.72rem;color:{"#34d399" if _hit else "#f87171"};'
                                   f'font-weight:700;margin-left:.4rem">{"✓ 예측 적중" if _hit else "✗ 빗나감"}</span>')
 
                 st.markdown(
@@ -1444,10 +1444,10 @@ if loaded:
                     f'<div class="pitch-code" style="color:{_m["color"]}">{_display_code}</div>'
                     f'<div class="pitch-name">{_ocr_type_str or _m["name"]}</div>'
                     f'<div style="margin-top:.2rem;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem">'
-                    f'<span style="color:#64748b;font-size:.78rem;font-weight:600">{_spd}</span>'
+                    f'<span style="color:#64748b;font-size:.85rem;font-weight:600">{_spd}</span>'
                     f'<span style="background:{_desc_col}22;color:{_desc_col};border:1px solid {_desc_col}44;'
-                    f'border-radius:999px;padding:.08rem .4rem;font-size:.6rem;font-weight:700">{_desc_kor}</span>'
-                    + (f'<span style="color:#34d399;font-size:.65rem;font-weight:700">[{_ev_kor}]</span>' if _ev_kor else "")
+                    f'border-radius:999px;padding:.08rem .4rem;font-size:.68rem;font-weight:700">{_desc_kor}</span>'
+                    + (f'<span style="color:#34d399;font-size:.72rem;font-weight:700">[{_ev_kor}]</span>' if _ev_kor else "")
                     + (_prev_pred)
                     + f'</div></div></div></div>',
                     unsafe_allow_html=True)
@@ -1455,7 +1455,7 @@ if loaded:
                 st.markdown(
                     '<div class="pitch-card" style="min-height:70px;display:flex;align-items:center;'
                     'justify-content:center;background:rgba(8,14,26,.5);border-color:rgba(59,130,246,.1)">'
-                    '<span style="color:#334155;font-size:.8rem">⚾ 경기 로드 후 재생</span></div>',
+                    '<span style="color:#334155;font-size:.9rem">⚾ 경기 로드 후 재생</span></div>',
                     unsafe_allow_html=True)
 
             # ── 다음 구종 예측 ──
