@@ -1578,11 +1578,10 @@ if loaded and c_idx > 0:
     ):
         with _col:
             st.markdown(
-                f'<div style="background:rgba(15,23,42,.6);border:1px solid rgba(59,130,246,.1);'
-                f'border-radius:10px;padding:.7rem 1rem;text-align:center;margin-bottom:.5rem">'
-                f'<div style="font-size:.6rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.22rem">{_lbl}</div>'
-                f'<div style="font-size:1.35rem;font-weight:800;color:#e2e8f0;line-height:1">{_val}</div>'
-                f'<div style="font-size:.62rem;color:#64748b;margin-top:.08rem">{_sub}</div>'
+                f'<div class="stat-card">'
+                f'<div style="font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.28rem">{_lbl}</div>'
+                f'<div style="font-size:1.55rem;font-weight:800;color:#e2e8f0;line-height:1">{_val}</div>'
+                f'<div style="font-size:.7rem;color:#64748b;margin-top:.1rem">{_sub}</div>'
                 f'</div>', unsafe_allow_html=True)
 
 # 오프라인 스캔 폴링 (2초마다 완료 여부 확인)
