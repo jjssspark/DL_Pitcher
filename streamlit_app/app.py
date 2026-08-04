@@ -529,6 +529,39 @@ def _run_bilstm_bg(game_pk: int, pitcher_id_tuple: tuple) -> None:
         _bilstm_tasks[game_pk] = {"status": "error", "error": str(e)}
 
 
+def _load_game(gk_str: str) -> tuple[bool, str]:
+    """game_pk 문자열로 Statcast 데이터 로드 + BiLSTM 백그라운드 계산 트리거.
+    성공 시 (True, 안내메시지), 실패 시 (False, 에러메시지)를 반환한다.
+    """
+    try:
+        gk = int(gk_str.strip())
+        with st.spinner("Statcast 데이터 수집 중..."):
+            _pitches, _meta = fetch_game_pitches(gk)
+        _pid_tuple = tuple(sorted({p["pitcher_id"] for p in _pitches}))
+        st.session_state.game_pk            = gk_str.strip()
+        st.session_state.game_pitches       = _pitches
+        st.session_state.game_meta          = _meta
+        st.session_state.bilstm_preds       = []
+        st.session_state.bilstm_status      = "computing"
+        st.session_state.current_pitch_idx  = 0
+        st.session_state._last_ocr_mlb_idx      = -1
+        st.session_state._sync_activated         = False
+        st.session_state.video_pitch_data        = []
+        st.session_state._scan_raw_data          = []
+        st.session_state._next_scan_idx          = 0
+        st.session_state._sixth_inning_alert     = False
+        st.session_state._last_pitch_video_time  = -30.0
+        # BiLSTM은 백그라운드에서 계산 (앱 즉시 시작)
+        if gk not in _bilstm_tasks or _bilstm_tasks[gk].get("status") != "done":
+            _bilstm_tasks[gk] = {"status": "computing"}
+            threading.Thread(
+                target=_run_bilstm_bg, args=(gk, _pid_tuple), daemon=True
+            ).start()
+        return True, f"✅ {_meta['game_date']} {_meta['away_team']} @ {_meta['home_team']} — {len(_pitches)}구 로드 완료 (BiLSTM 계산 중...)"
+    except Exception as _e:
+        return False, f"로드 실패: {_e}"
+
+
 def _scan_cache_path(video_path: str, version: str) -> str:
     import hashlib
     key = hashlib.md5(f"{video_path}|{version}".encode()).hexdigest()[:12]
@@ -720,34 +753,12 @@ with st.sidebar:
         clear_btn = st.button("초기화", use_container_width=True)
 
     if load_btn and gk_input.strip():
-        try:
-            gk = int(gk_input.strip())
-            with st.spinner("Statcast 데이터 수집 중..."):
-                _pitches, _meta = fetch_game_pitches(gk)
-            _pid_tuple = tuple(sorted({p["pitcher_id"] for p in _pitches}))
-            st.session_state.game_pk            = gk_input.strip()
-            st.session_state.game_pitches       = _pitches
-            st.session_state.game_meta          = _meta
-            st.session_state.bilstm_preds       = []
-            st.session_state.bilstm_status      = "computing"
-            st.session_state.current_pitch_idx  = 0
-            st.session_state._last_ocr_mlb_idx      = -1
-            st.session_state._sync_activated         = False
-            st.session_state.video_pitch_data        = []
-            st.session_state._scan_raw_data          = []
-            st.session_state._next_scan_idx          = 0
-            st.session_state._sixth_inning_alert     = False
-            st.session_state._last_pitch_video_time  = -30.0
-            # BiLSTM은 백그라운드에서 계산 (앱 즉시 시작)
-            if gk not in _bilstm_tasks or _bilstm_tasks[gk].get("status") != "done":
-                _bilstm_tasks[gk] = {"status": "computing"}
-                threading.Thread(
-                    target=_run_bilstm_bg, args=(gk, _pid_tuple), daemon=True
-                ).start()
-            st.success(f"✅ {_meta['game_date']} {_meta['away_team']} @ {_meta['home_team']} — {len(_pitches)}구 로드 완료 (BiLSTM 계산 중...)")
+        _ok, _msg = _load_game(gk_input.strip())
+        if _ok:
+            st.success(_msg)
             st.rerun()
-        except Exception as _e:
-            st.error(f"로드 실패: {_e}")
+        else:
+            st.error(_msg)
 
     if clear_btn:
         for k in ["game_pk", "game_pitches", "game_meta", "bilstm_preds", "bilstm_status",
