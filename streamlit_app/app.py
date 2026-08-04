@@ -107,6 +107,10 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
   border-radius:10px!important;background:rgba(15,23,42,.4)!important}
 </style>""", unsafe_allow_html=True)
 
+# ══ 고정 데모 설정 ════════════════════════════════════════════════
+FIXED_DEMO_GAME_PK   = 775300
+FIXED_DEMO_VIDEO_URL = "https://youtu.be/gMm3EODDb6w"
+
 # ══ 구종 메타 ══════════════════════════════════════════════════════
 PITCH_META = {
     "FF": {"name": "포심 패스트볼", "color": "#ef4444", "emoji": "🔴"},
@@ -624,10 +628,21 @@ _DEFAULTS = {
     "_vid_t":                None,    # 저장된 영상 재생 시각
     "_vid_t_wall":           0.0,     # _vid_t 수신 당시 벽시계 (wall clock)
     "_vid_pl":               False,   # 저장된 재생 중 여부
+    "_demo_auto_loaded":     False,  # 최초 진입 자동 데모 로드 완료 여부 (초기화 버튼으로 리셋 안 됨)
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
         st.session_state[_k] = _v
+
+# ══ 최초 진입: 고정 데모 자동 로드 ═══════════════════════════════════
+# game_pk가 비어있고(한 번도 로드 안 됨) 아직 자동로드를 시도한 적 없을 때만 1회 실행.
+# "초기화" 버튼은 _demo_auto_loaded를 리셋하지 않으므로 재자동로드되지 않는다.
+if not st.session_state._demo_auto_loaded and st.session_state.game_pk == "":
+    st.session_state._demo_auto_loaded = True
+    st.session_state.video_src = FIXED_DEMO_VIDEO_URL
+    _demo_ok, _demo_msg = _load_game(str(FIXED_DEMO_GAME_PK))
+    if not _demo_ok:
+        print(f"[FixedDemo] 자동 로드 실패: {_demo_msg}")
 
 # 앱 재로드 후 _pose_tasks 사라진 경우: 캐시 디렉토리에서 영상 파일 자동 감지
 _cache_dir = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
