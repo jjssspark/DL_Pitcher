@@ -20,10 +20,23 @@ st.set_page_config(page_title="PitchIQ", page_icon="⚾", layout="wide",
 
 # ══ CSS ══════════════════════════════════════════════════════════
 st.markdown("""<style>
-[data-testid="stAppViewContainer"]{background:#080e1a;min-height:100vh}
+@import url('https://fonts.googleapis.com/css2?family=Oswald:wght@700;900&display=swap');
+
+[data-testid="stAppViewContainer"]{
+  min-height:100vh;
+  background:
+    linear-gradient(115deg,transparent 49.6%,rgba(96,165,250,.05) 49.6% 50%,transparent 50%),
+    linear-gradient(65deg,transparent 49.6%,rgba(96,165,250,.05) 49.6% 50%,transparent 50%),
+    radial-gradient(ellipse 80% 50% at 50% -10%,rgba(59,130,246,.06),transparent),
+    linear-gradient(180deg,#0a1120 0%,#080e1a 40%,#05080f 100%);
+  background-attachment:fixed}
 [data-testid="stSidebar"]{background:rgba(10,16,30,.97)!important;border-right:1px solid rgba(59,130,246,.18)}
 html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif;color:#e2e8f0}
 #MainMenu,footer,header{visibility:hidden}
+
+/* 스코어보드 타이포 — 큰 숫자/코드 요소는 콘덴스드 디스플레이 폰트 */
+.team-score,.pitch-code,.conf-gauge-code,.hero-title,.intro-logo,.inning-box{
+  font-family:'Oswald',sans-serif}
 
 /* rerun 깜빡임 방지 */
 [data-stale="true"]{opacity:1!important;transition:none!important}
@@ -168,6 +181,12 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .glow-miss{animation:cardReveal .35s ease-out,glowMiss .8s ease-out}
 @keyframes glowHit{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}100%{box-shadow:0 0 0 14px rgba(52,211,153,0)}}
 @keyframes glowMiss{0%{box-shadow:0 0 0 0 rgba(248,113,113,.55)}100%{box-shadow:0 0 0 10px rgba(248,113,113,0)}}
+
+/* 사이드바 — 스티치 구분선 & 카드 */
+.stitch-divider{height:5px;margin:.7rem 0;
+  border-top:1px dashed rgba(148,163,184,.28);border-bottom:1px dashed rgba(148,163,184,.28)}
+.sidebar-card{background:rgba(15,23,42,.55);border:1px solid rgba(59,130,246,.1);
+  border-radius:10px;padding:.75rem .9rem;margin-bottom:.7rem}
 </style>""", unsafe_allow_html=True)
 
 # ══ 고정 데모 설정 ════════════════════════════════════════════════
@@ -841,17 +860,17 @@ with st.sidebar:
         '<div style="font-size:.78rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
         '</div>', unsafe_allow_html=True)
 
-    st.divider()
+    st.markdown('<div class="stitch-divider"></div>', unsafe_allow_html=True)
 
     # 경기 진행 요약 (로드된 경우)
     if loaded:
         cur = pitches[c_idx]
-        st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.4rem">경기 현황</p>', unsafe_allow_html=True)
         half = "▲" if cur["inning_topbot"] == "Top" else "▼"
         _away_s = cur["away_score"]
         _home_s = cur["home_score"]
-        _diff   = _away_s - _home_s
         st.markdown(
+            '<div class="sidebar-card">'
+            '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.4rem">경기 현황</p>'
             f'<div style="font-size:.85rem;line-height:2.1;color:#64748b">'
             f'<div>{cur["away_team"]} <span style="color:#e2e8f0;font-weight:700">{_away_s}</span>'
             f' : <span style="color:#e2e8f0;font-weight:700">{_home_s}</span> {cur["home_team"]}</div>'
@@ -859,19 +878,20 @@ with st.sidebar:
             f'<div>카운트 <span style="color:#e2e8f0;font-weight:700">{cur["balls"]}-{cur["strikes"]}</span>'
             f'  아웃 <span style="color:#fbbf24;font-weight:700">{cur["outs"]}</span></div>'
             f'<div>진행 <span style="color:#a78bfa;font-weight:700">{c_idx+1}/{len(pitches)}구</span></div>'
-            f'</div>', unsafe_allow_html=True)
-        st.divider()
+            f'</div></div>', unsafe_allow_html=True)
 
     # 구종 범례
-    st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">구종 범례</p>', unsafe_allow_html=True)
-    for _c, _m in list(PITCH_META.items())[:10]:
-        if _c == "OTHER": continue
-        st.markdown(
-            f'<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;font-size:.8rem">'
-            f'<div style="width:7px;height:7px;border-radius:50%;background:{_m["color"]};flex-shrink:0"></div>'
-            f'<span style="color:#64748b;width:2rem">{_c}</span>'
-            f'<span style="color:#475569">{_m["name"]}</span></div>',
-            unsafe_allow_html=True)
+    _legend_rows = "".join(
+        f'<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;font-size:.8rem">'
+        f'<div style="width:7px;height:7px;border-radius:50%;background:{_m["color"]};flex-shrink:0"></div>'
+        f'<span style="color:#64748b;width:2rem">{_c}</span>'
+        f'<span style="color:#475569">{_m["name"]}</span></div>'
+        for _c, _m in list(PITCH_META.items())[:10] if _c != "OTHER"
+    )
+    st.markdown(
+        '<div class="sidebar-card">'
+        '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">구종 범례</p>'
+        f'{_legend_rows}</div>', unsafe_allow_html=True)
 
 
 def _render_landing_hero() -> None:
@@ -1488,18 +1508,20 @@ if loaded and c_idx > 0:
     _avgspd = float(np.mean(_spds)) if _spds else 0.0
 
     st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
-    for _col, _lbl, _val, _sub in zip(
+    for _col, _icon, _lbl, _val, _sub, _vcol in zip(
         st.columns(4),
-        ["분析 투구", "패스트볼", "변화구", "평균 구속"],
+        ["⚾", "🔴", "🔵", "💨"],
+        ["분석 투구", "패스트볼", "변화구", "평균 구속"],
         [str(_tot), f"{_ff/max(_tot,1):.0%}", f"{(_br+_os)/max(_tot,1):.0%}",
          f"{_avgspd:.1f}" if _avgspd else "—"],
         ["구", f"{_ff}구", f"{_br+_os}구", "mph"],
+        ["#e2e8f0", "#ef4444", "#3b82f6", "#fbbf24"],
     ):
         with _col:
             st.markdown(
                 f'<div class="stat-card">'
-                f'<div style="font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.28rem">{_lbl}</div>'
-                f'<div style="font-size:1.55rem;font-weight:800;color:#e2e8f0;line-height:1">{_val}</div>'
+                f'<div style="font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.28rem">{_icon}&nbsp;{_lbl}</div>'
+                f'<div style="font-size:1.55rem;font-weight:800;color:{_vcol};line-height:1">{_val}</div>'
                 f'<div style="font-size:.7rem;color:#64748b;margin-top:.1rem">{_sub}</div>'
                 f'</div>', unsafe_allow_html=True)
 
