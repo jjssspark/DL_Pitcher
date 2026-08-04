@@ -664,6 +664,32 @@ if st.session_state._pose_task_id and st.session_state._pose_task_id not in _pos
 # 재시작 후 캐시 영상이 있고 스캔이 안 됐거나 파라미터 버전이 다르면 재스캔
 _SCAN_VER   = "v5-ocr-overlay"
 
+# ══ 고정 데모 게임의 정적 스캔 캐시 로드 (다운로드/실시간 OCR 없음) ═════════
+if (
+    st.session_state.get("game_pk") == str(FIXED_DEMO_GAME_PK)
+    and not st.session_state.get("video_pitch_times")
+    and st.session_state.get("_scan_status", "idle") == "idle"
+):
+    _fixed_scan_path = os.path.join(ROOT, "streamlit_app", "fixed_demo_scan.json")
+    if os.path.exists(_fixed_scan_path):
+        try:
+            with open(_fixed_scan_path) as _fsf:
+                _fs = json.load(_fsf)
+            if _fs.get("version") == _SCAN_VER:
+                st.session_state.video_pitch_times = _fs["pitch_times"]
+                st.session_state._scan_raw_data    = _fs.get("pitch_data", [])
+                st.session_state.video_pitch_data  = []
+                st.session_state._next_scan_idx    = 0
+                st.session_state._scan_status      = "done"
+                st.session_state._scan_version     = _SCAN_VER
+                print(f"[FixedDemo] 정적 스캔 캐시 로드: {len(_fs['pitch_times'])}개")
+            else:
+                print(f"[FixedDemo] 스캔 캐시 버전 불일치: {_fs.get('version')} != {_SCAN_VER}")
+        except Exception as _fse:
+            print(f"[FixedDemo] 스캔 캐시 로드 실패: {_fse}")
+    else:
+        print(f"[FixedDemo] 스캔 캐시 파일 없음: {_fixed_scan_path}")
+
 # 오프라인 스캔 완료 체크
 _stid_check = st.session_state.get("_scan_task_id")
 if _stid_check and _scan_tasks.get(_stid_check, {}).get("status") == "done":
