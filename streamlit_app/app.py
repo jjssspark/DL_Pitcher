@@ -1056,8 +1056,7 @@ if loaded:
             print(f"[SYNC] vid_t={_vid_t} pl={_vid_pl} loaded={loaded} lpath={bool(_local_path)}")
             if _vid_t is not None and loaded and _vid_pl:
                 _target_idx  = int((_vid_t / FIXED_DEMO_VIDEO_DURATION_SEC) * len(pitches))
-                _target_idx  = max(0, min(_target_idx, len(pitches) - 1))
-                _new_cidx_ts = min(_target_idx + 1, len(pitches) - 1)
+                _new_cidx_ts = max(0, min(_target_idx, len(pitches) - 1))
                 if _new_cidx_ts > st.session_state.get("current_pitch_idx", 0):
                     st.session_state.current_pitch_idx = _new_cidx_ts
                     st.session_state._sync_activated    = True
