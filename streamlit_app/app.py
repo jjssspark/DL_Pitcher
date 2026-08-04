@@ -1089,14 +1089,14 @@ if loaded:
 
             _pose_active = bool(st.session_state.get("_pose_task_id"))
             _scan_st_note = st.session_state.get("_scan_status", "idle")
-            if _scan_st_note == "scanning":
+            if not _local_ready:
+                _sync_note = "아래 슬라이더로 투구를 이동하세요"
+            elif _scan_st_note == "scanning":
                 _sync_note = "⏳ 영상 분석 중..."
             elif _scan_st_note == "done":
                 _sync_note = "✅ 싱크 준비 완료 — 재생하면 자동 감지"
             elif _pose_active:
                 _sync_note = "🔍 투구 모션 감지 중..."
-            elif not _local_ready:
-                _sync_note = "아래 슬라이더로 투구를 이동하세요"
             else:
                 _sync_note = ""
             _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | "
