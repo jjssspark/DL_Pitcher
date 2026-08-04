@@ -39,7 +39,7 @@
     if (e.data.type !== "streamlit:render") return;
     componentArgs = e.data.args;
 
-    if (componentArgs && componentArgs.video_id && !player) {
+    if (componentArgs && componentArgs.video_id && !player && window.YT && window.YT.Player) {
       initPlayer(componentArgs.video_id, componentArgs.start_sec || 0);
       return;
     }
@@ -78,7 +78,9 @@
         start: Math.floor(startSec || 0),
         rel: 0,
         modestbranding: 1,
-        playsinline: 1
+        playsinline: 1,
+        autoplay: 1,
+        mute: 1
       },
       events: {
         onReady: function() {

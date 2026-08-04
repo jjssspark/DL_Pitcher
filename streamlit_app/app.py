@@ -505,23 +505,6 @@ def _get_video_server(directory: str) -> int:
     return 8510
 
 
-def _run_download_bg(task_id: str, yt_url: str) -> None:
-    """YouTube 영상 다운로드 (YOLO 처리 없음 — 포즈 감지는 실시간으로)"""
-    _cache_dir = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
-    os.makedirs(_cache_dir, exist_ok=True)
-    try:
-        from yolo_detector import resolve_video_path
-        video_path = resolve_video_path(yt_url, download_dir=_cache_dir)
-        _pose_tasks[task_id] = {"status": "done", "video_path": video_path}
-    except Exception as e:
-        _pose_tasks[task_id] = {"status": "error", "error": str(e)}
-
-
-def _start_download_bg(yt_url: str) -> str:
-    task_id = str(uuid.uuid4())[:8]
-    _pose_tasks[task_id] = {"status": "downloading"}
-    threading.Thread(target=_run_download_bg, args=(task_id, yt_url), daemon=True).start()
-    return task_id
 
 
 def _run_bilstm_bg(game_pk: int, pitcher_id_tuple: tuple) -> None:
@@ -606,7 +589,6 @@ _DEFAULTS = {
     "current_pitch_idx":     0,
     "video_src":             None,
     "_upload_name":          "",
-    "_download_task_id":     None,   # 영상 다운로드 태스크
     "_local_video_path":     None,   # 다운로드된 로컬 MP4 경로
     "_pose_task_id":         None,   # 투구 감지 태스크
     "_pose_last_check_time": -99.0,  # 마지막 포즈 체크 시각
@@ -640,6 +622,7 @@ for _k, _v in _DEFAULTS.items():
 if not st.session_state._demo_auto_loaded and st.session_state.game_pk == "":
     st.session_state._demo_auto_loaded = True
     st.session_state.video_src = FIXED_DEMO_VIDEO_URL
+    st.session_state.is_playing = True  # iframe autoplay와 상태 일치 — 다음 rerun에서 pauseVideo() 방지
     _demo_ok, _demo_msg = _load_game(str(FIXED_DEMO_GAME_PK))
     if not _demo_ok:
         print(f"[FixedDemo] 자동 로드 실패: {_demo_msg}")
@@ -656,8 +639,6 @@ if not st.session_state._local_video_path and os.path.exists(_cache_dir):
         st.session_state._local_video_path = os.path.join(_cache_dir, _cached[0])
 
 # 태스크 ID가 있는데 _pose_tasks에 없으면 (재로드로 결과 소실) 초기화
-if st.session_state._download_task_id and st.session_state._download_task_id not in _pose_tasks:
-    st.session_state._download_task_id = None
 if st.session_state._pose_task_id and st.session_state._pose_task_id not in _pose_tasks:
     st.session_state._pose_task_id = None
 
@@ -783,170 +764,6 @@ with st.sidebar:
         '-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">⚾ PitchIQ</div>'
         '<div style="font-size:.78rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
         '</div>', unsafe_allow_html=True)
-
-    with st.expander("⚙️ 고급: 다른 경기 직접 불러오기", expanded=False):
-        st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 로드</p>', unsafe_allow_html=True)
-        gk_input = st.text_input("Baseball Savant game_pk", value=st.session_state.game_pk,
-                                  placeholder="예: 745735", label_visibility="collapsed")
-        load_col, clear_col = st.columns(2)
-        with load_col:
-            load_btn  = st.button("경기 로드", use_container_width=True)
-        with clear_col:
-            clear_btn = st.button("초기화", use_container_width=True)
-
-        if load_btn and gk_input.strip():
-            _ok, _msg = _load_game(gk_input.strip())
-            if _ok:
-                st.success(_msg)
-                st.rerun()
-            else:
-                st.error(_msg)
-
-        if clear_btn:
-            for k in ["game_pk", "game_pitches", "game_meta", "bilstm_preds", "bilstm_status",
-                      "current_pitch_idx", "_last_ocr_mlb_idx", "_sync_activated",
-                      "video_pitch_data", "_scan_raw_data", "_next_scan_idx",
-                      "_sixth_inning_alert", "_last_pitch_video_time"]:
-                st.session_state[k] = _DEFAULTS.get(k, None)
-            st.rerun()
-
-        # BiLSTM 상태 표시
-        _bstatus = st.session_state.get("bilstm_status", "idle")
-        if _bstatus == "computing":
-            st.markdown(
-                '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);'
-                'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#fbbf24;margin-top:.3rem">'
-                '⏳ BiLSTM 계산 중... (통계 예측 사용 중)</div>',
-                unsafe_allow_html=True)
-        elif _bstatus == "done":
-            _bcnt = sum(1 for p in st.session_state.get("bilstm_preds", []) if p is not None)
-            st.markdown(
-                f'<div style="background:rgba(167,139,250,.1);border:1px solid rgba(167,139,250,.3);'
-                f'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#a78bfa;margin-top:.3rem">'
-                f'✅ BiLSTM {_bcnt}구 적용됨</div>',
-                unsafe_allow_html=True)
-
-        st.divider()
-
-        # 영상 업로드
-        st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">경기 영상</p>', unsafe_allow_html=True)
-        yt_url = st.text_input("YouTube URL", placeholder="https://youtube.com/watch?v=...",
-                               label_visibility="collapsed")
-        if yt_url.strip() and yt_url.strip() != getattr(st.session_state, "_yt_url", ""):
-            st.session_state._yt_url             = yt_url.strip()
-            st.session_state.video_src           = yt_url.strip()
-            st.session_state._local_video_path    = None
-            st.session_state.detected_pitch_times = {}
-            st.session_state.video_synced         = False
-            st.session_state.video_pitch_times    = []
-            st.session_state._scan_task_id        = None
-            st.session_state._scan_status         = "idle"
-            st.session_state._sync_activated      = False
-            st.session_state._scan_raw_data       = []
-            st.session_state._next_scan_idx       = 0
-            st.session_state._sixth_inning_alert  = False
-            _dl_task = _start_download_bg(yt_url.strip())
-            st.session_state._download_task_id   = _dl_task
-            st.rerun()
-
-        if st.session_state.video_src:
-            st.markdown(f'<p style="font-size:.8rem;color:#34d399">✓ {str(st.session_state.video_src)[:50]}</p>', unsafe_allow_html=True)
-
-        # 다운로드 상태
-        _dl_tid = st.session_state.get("_download_task_id")
-        if _dl_tid and _dl_tid in _pose_tasks:
-            _dl_task = _pose_tasks[_dl_tid]
-            if _dl_task["status"] == "downloading":
-                st.markdown('<p style="font-size:.8rem;color:#fbbf24">⬇ 영상 다운로드 중...</p>', unsafe_allow_html=True)
-            elif _dl_task["status"] == "done":
-                _vpath = _dl_task["video_path"]
-                st.session_state._local_video_path  = _vpath
-                st.session_state._download_task_id  = None
-                del _pose_tasks[_dl_tid]
-                # 다운로드 완료 → 디스크 캐시 확인 후 스캔 또는 즉시 로드
-                if not st.session_state.get("_scan_task_id") and not st.session_state.get("video_pitch_times"):
-                    _disk_cache2 = _scan_cache_path(_vpath, _SCAN_VER)
-                    _loaded2 = False
-                    if os.path.exists(_disk_cache2):
-                        try:
-                            with open(_disk_cache2) as _dcf2:
-                                _dc2 = json.load(_dcf2)
-                            if _dc2.get("version") == _SCAN_VER:
-                                st.session_state.video_pitch_times = _dc2["pitch_times"]
-                                st.session_state._scan_raw_data    = _dc2.get("pitch_data", [])
-                                st.session_state.video_pitch_data  = []
-                                st.session_state._next_scan_idx    = 0
-                                st.session_state._scan_status      = "done"
-                                st.session_state._scan_version     = _SCAN_VER
-                                _loaded2 = True
-                        except Exception:
-                            pass
-                    if not _loaded2:
-                        _gp2          = st.session_state.get("game_pitches", [])
-                        _n_pitches    = len(_gp2)
-                        _max_pitches2 = sum(1 for p in _gp2 if p.get("inning", 0) <= 5)
-                        _stid = str(uuid.uuid4())[:8]
-                        _scan_tasks[_stid] = {"status": "scanning"}
-                        threading.Thread(
-                            target=_run_scan_bg, args=(_stid, _vpath, _n_pitches, _max_pitches2), daemon=True
-                        ).start()
-                        st.session_state._scan_task_id = _stid
-                        st.session_state._scan_status  = "scanning"
-                st.rerun()
-            elif _dl_task["status"] == "error":
-                st.markdown(f'<p style="font-size:.8rem;color:#f87171">⚠ 다운로드 실패: {_dl_task.get("error","")[:40]}</p>', unsafe_allow_html=True)
-
-        if st.session_state._local_video_path and st.session_state.video_src:
-            _scan_st = st.session_state.get("_scan_status", "idle")
-            if _scan_st == "scanning":
-                st.markdown(
-                    '<div style="background:rgba(251,191,36,.1);border:1px solid rgba(251,191,36,.3);'
-                    'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#fbbf24;margin-top:.25rem">'
-                    '⏳ 1~5이닝 분석 중... (6회초 도달 시 자동 종료)</div>',
-                    unsafe_allow_html=True)
-            elif _scan_st == "done":
-                _n_found = len(st.session_state.get("video_pitch_times", []))
-                st.markdown(
-                    f'<div style="background:rgba(52,211,153,.1);border:1px solid rgba(52,211,153,.3);'
-                    f'border-radius:8px;padding:.4rem .7rem;font-size:.82rem;color:#34d399;margin-top:.25rem">'
-                    f'✅ 영상 싱크 완료 — {_n_found}개 투구 감지</div>',
-                    unsafe_allow_html=True)
-            elif _scan_st == "error":
-                st.markdown('<p style="font-size:.8rem;color:#f87171;margin-top:.2rem">⚠ 영상 분석 실패</p>', unsafe_allow_html=True)
-            else:
-                st.markdown('<p style="font-size:.8rem;color:#94a3b8">대기 중</p>', unsafe_allow_html=True)
-
-            # 싱크 상태
-            _sa     = st.session_state.get("_sync_activated", False)
-            _sa_txt = "🟢 실시간 OCR 활성" if _sa else "⚪ 재생 시 자동감지"
-            _ocr_cnt = len([v for v in st.session_state.get("video_pitch_data", []) if v and isinstance(v, dict)])
-            _cur_offset = st.session_state.get("_scan_time_offset", 0.0)
-            st.markdown(
-                f'<div style="font-size:.75rem;color:#475569;margin-top:.3rem;line-height:1.9">'
-                f'싱크: {_sa_txt}<br>'
-                f'감지된 투구: {_ocr_cnt}구 | 현재: #{c_idx+1 if _sa else "—"} / {len(pitches)}<br>'
-                f'오프셋: {_cur_offset:+.1f}s'
-                f'</div>', unsafe_allow_html=True)
-
-            # 타임라인 보정 — YouTube 영상 타임라인이 스캔 캐시와 다를 때
-            _vtimes_sb = st.session_state.get("video_pitch_times", [])
-            if _vtimes_sb:
-                st.markdown('<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin:.5rem 0 .3rem">타임라인 보정</p>', unsafe_allow_html=True)
-                _calib_n = st.number_input("현재 영상이 몇 구?", min_value=1, max_value=len(_vtimes_sb),
-                                           value=1, step=1, label_visibility="visible",
-                                           key="_calib_pitch_n")
-                if st.button("지금 시점으로 보정", use_container_width=True, key="_calib_btn"):
-                    _cur_vt = st.session_state.get("_vid_t")
-                    if _cur_vt is not None and (_calib_n - 1) < len(_vtimes_sb):
-                        # 영상 현재 시간 + offset = scan_timestamp - 5.0(overlay delay)
-                        # offset = scan_timestamp - 5.0 - current_vid_t
-                        _target_t = _vtimes_sb[_calib_n - 1] - 5.0
-                        st.session_state._scan_time_offset = _target_t - _cur_vt
-                        st.session_state._next_scan_idx    = _calib_n - 1
-                        st.session_state._last_ocr_mlb_idx = _calib_n - 2
-                        st.rerun()
-                    else:
-                        st.warning("영상을 재생 중일 때 클릭하세요")
 
     st.divider()
 
@@ -1282,9 +1099,7 @@ if loaded:
 
             _pose_active = bool(st.session_state.get("_pose_task_id"))
             _scan_st_note = st.session_state.get("_scan_status", "idle")
-            if st.session_state.get("_download_task_id"):
-                _sync_note = "⬇ 영상 다운로드 중..."
-            elif _scan_st_note == "scanning":
+            if _scan_st_note == "scanning":
                 _sync_note = "⏳ 영상 분석 중..."
             elif _scan_st_note == "done":
                 _sync_note = "✅ 싱크 준비 완료 — 재생하면 자동 감지"
