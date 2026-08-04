@@ -140,6 +140,7 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 FIXED_DEMO_GAME_PK   = 775300
 FIXED_DEMO_VIDEO_URL = "https://youtu.be/gMm3EODDb6w"
 TEAM_COLORS = {"NYY": "#0C2340", "LAD": "#005A9C"}  # 고정 데모 게임은 이 두 팀만 등장
+FIXED_DEMO_VIDEO_DURATION_SEC = 8231  # 고정 데모 YouTube 영상 총 길이(초)
 
 # ══ 구종 메타 ══════════════════════════════════════════════════════
 PITCH_META = {
@@ -794,20 +795,6 @@ meta      = st.session_state.game_meta
 c_idx     = st.session_state.current_pitch_idx
 loaded    = bool(pitches)
 
-# P:N 카운터 → MLB 인덱스 직접 매핑 (투수별 누적 구 번호)
-# Fox 오버레이 "FLAHERTY P:N" = Flaherty가 던진 N번째 구
-# Top 이닝(NYY 타격) = LAD 투수(Flaherty) 등판
-_pitcher_p_map: dict[int, int] = {}  # pitch_count → pitches[] 인덱스
-if loaded:
-    _p_counts: dict[int, int] = {}  # pitcher_id → 누적 투구 수
-    for _i, _p in enumerate(pitches):
-        _pid = _p.get("pitcher_id", 0)
-        _p_counts[_pid] = _p_counts.get(_pid, 0) + 1
-        _pn = _p_counts[_pid]
-        # Top 이닝 투수(Flaherty)만 P:N에 해당 — 첫 번째 Top 투수 기준
-        if _p.get("inning_topbot") == "Top":
-            _pitcher_p_map[_pn] = _i
-
 
 # ══ 사이드바 ══════════════════════════════════════════════════════
 with st.sidebar:
@@ -1049,19 +1036,16 @@ if loaded:
 
             _local_path = _local_play_path
 
-            # ── 타임스탬프 기반 자동 싱크 ──
-            _vtimes     = st.session_state.get("video_pitch_times", [])
-            _vraw       = st.session_state.get("_scan_raw_data", [])
-            _nsi        = st.session_state.get("_next_scan_idx", 0)
+            # ── 시간 비례 자동 싱크 ──
+            # 정적 OCR 스캔은 320구 중 65개(~20%)만 감지해 개별 투구 단위 싱크는 신뢰할 수
+            # 없음(감지 간 간격이 실제로 여러 투구를 건너뛰는 경우가 흔함). 대신 영상 재생
+            # 시간 대비 진행 비율로 투구 인덱스를 추정한다 — 프레임 단위로 정확하진 않지만
+            # 항상 부드럽게 앞으로 진행한다. 구종/구속 표시는 이미 실제 Statcast 데이터로
+            # 폴백하므로(아래 _display_code 로직) 내용 정확도엔 영향 없다.
             _vid_t_base = st.session_state.get("_vid_t")
             _vid_t_wall = st.session_state.get("_vid_t_wall", 0.0)
             _vid_pl     = st.session_state.get("_vid_pl", False)
 
-            # 현재 영상 시각
-            # - 컴포넌트 값이 오면 무조건 우선 사용
-            # - 없을 때: 재생 중이면 벽시계로 추정, 일시정지면 마지막 값 고정
-            # 벽시계 추정 제거 — YouTube가 보고한 마지막 시각만 사용
-            # (추정 시 버퍼링 중에도 앱 시간이 앞서 달려 미래 구까지 처리되는 문제 방지)
             if _current_video_time is not None:
                 _vid_t = _current_video_time
             elif _vid_t_base is not None:
@@ -1069,51 +1053,14 @@ if loaded:
             else:
                 _vid_t = None
 
-            print(f"[SYNC] vid_t={_vid_t} nsi={_nsi} vtimes={len(_vtimes)} loaded={loaded} lpath={bool(_local_path)}")
-            if (_vid_t is not None and loaded and _nsi < len(_vtimes)):
-                _any_synced   = False
-                _vpd_ts       = list(st.session_state.get("video_pitch_data", []))
-                _last_m       = st.session_state.get("_last_ocr_mlb_idx", -1)
-                _new_cidx_ts  = st.session_state.get("current_pitch_idx", 0)
-                # _scan_time_offset: YouTube 타임라인 ≠ 스캔 캐시 타임라인일 때 보정값
-                _scan_offset = st.session_state.get("_scan_time_offset", 0.0)
-                _vid_t_adj   = _vid_t + _scan_offset
-                # 오버레이는 투구 종료 후 약 4.5초 후 감지 → 5.0초 앞당겨 투구 직후 싱크
-                if _nsi < len(_vtimes) and _vid_t_adj >= _vtimes[_nsi] - 5.0:
-                    _sinfo   = _vraw[_nsi] if _nsi < len(_vraw) else {}
-                    _stype   = _sinfo.get("pitch_type")
-
-                    # 순차 전진 기본값 — 잘못된 OCR 점프 방지
-                    _bidx = min(_last_m + 1, len(pitches) - 1)
-
-                    # P:N 카운터가 _pitcher_p_map(신뢰 가능한 매핑)에 존재하고 순차 전진보다
-                    # 앞선 위치를 가리키면 그쪽으로 점프 — 희소한 감지로 인한 드리프트 보정.
-                    # 절대 뒤로는 안 가고(오독으로 인한 역행 방지), 앞으로만 따라잡는다.
-                    _pcount = _sinfo.get("pitch_count")
-                    if _pcount and _pcount in _pitcher_p_map:
-                        _mapped_idx = min(_pitcher_p_map[_pcount], len(pitches) - 1)
-                        if _mapped_idx > _bidx:
-                            _bidx = _mapped_idx
-
-                    # 스캔 OCR 실패 시 MLB 데이터로 보완
-                    if not _stype and _bidx < len(pitches):
-                        _stype = pitches[_bidx].get("pitch_type")
-
-                    while len(_vpd_ts) <= _bidx:
-                        _vpd_ts.append({})
-                    _vpd_ts[_bidx]  = {"pitch_type": _stype, "speed": _sinfo.get("speed")}
-                    _new_cidx_ts    = min(_bidx + 1, len(pitches) - 1)
-                    _last_m         = _bidx
-                    print(f"[싱크] t={_vtimes[_nsi]:.1f}s → MLB#{_bidx+1} {_stype} c_idx={_new_cidx_ts}")
-                    _nsi           += 1
-                    _any_synced     = True
-                if _any_synced:
-                    st.session_state.video_pitch_data       = _vpd_ts
-                    st.session_state.current_pitch_idx      = _new_cidx_ts
-                    st.session_state._last_ocr_mlb_idx      = _last_m
-                    st.session_state._last_pitch_video_time = _vtimes[_nsi - 1]
-                    st.session_state._sync_activated        = True
-                    st.session_state._next_scan_idx         = _nsi
+            print(f"[SYNC] vid_t={_vid_t} loaded={loaded} lpath={bool(_local_path)}")
+            if _vid_t is not None and loaded:
+                _target_idx  = int((_vid_t / FIXED_DEMO_VIDEO_DURATION_SEC) * len(pitches))
+                _target_idx  = max(0, min(_target_idx, len(pitches) - 1))
+                _new_cidx_ts = min(_target_idx + 1, len(pitches) - 1)
+                if _new_cidx_ts > st.session_state.get("current_pitch_idx", 0):
+                    st.session_state.current_pitch_idx = _new_cidx_ts
+                    st.session_state._sync_activated    = True
                     if pitches[_new_cidx_ts]["inning"] >= 6:
                         st.session_state._sixth_inning_alert = True
                     st.rerun()
