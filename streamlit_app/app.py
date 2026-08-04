@@ -134,6 +134,40 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .card-badge-actual{background:rgba(52,211,153,.12);color:#6ee7b7;border:1px solid rgba(52,211,153,.3)}
 .pred-hero{border-width:1.5px!important;padding:1.3rem 1.5rem!important}
 .pred-hero .pitch-code{font-size:3rem!important}
+
+/* 게임 HUD — 원형 신뢰도 게이지 */
+.conf-gauge{width:84px;height:84px;border-radius:50%;position:relative;flex-shrink:0;
+  background:conic-gradient(var(--gauge-color) calc(var(--pct) * 3.6deg), rgba(255,255,255,.08) 0deg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center}
+.conf-gauge::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#0f172a}
+.conf-gauge>*{position:relative;z-index:1}
+.conf-gauge-code{font-size:1.25rem;font-weight:900;line-height:1}
+.conf-gauge-pct{font-size:.6rem;font-weight:700;color:#94a3b8;margin-top:.1rem}
+
+/* 게임 HUD — COMBO 스트릭 배지 */
+.combo-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:999px;
+  background:rgba(251,191,36,.16);border:1px solid rgba(251,191,36,.4);color:#fbbf24;
+  font-size:.72rem;font-weight:800;letter-spacing:.03em;margin-bottom:.4rem;
+  animation:comboPop .35s ease-out}
+@keyframes comboPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
+
+/* 게임 HUD — 투구 갱신 리빌 애니메이션 */
+.card-reveal{animation:cardReveal .35s ease-out}
+@keyframes cardReveal{0%{opacity:0;transform:translateY(8px)}100%{opacity:1;transform:translateY(0)}}
+
+/* 게임 HUD — LIVE 배지 */
+.live-badge{display:inline-flex;align-items:center;gap:.35rem;padding:.2rem .55rem;border-radius:999px;
+  background:rgba(239,68,68,.14);border:1px solid rgba(239,68,68,.4);color:#f87171;
+  font-size:.68rem;font-weight:800;letter-spacing:.06em}
+.live-badge::before{content:"";width:6px;height:6px;border-radius:50%;background:#ef4444;
+  animation:livePulse 1.5s ease-in-out infinite}
+@keyframes livePulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(.7)}}
+
+/* 게임 HUD — 적중/실패 글로우 (리빌 애니메이션 겸함) */
+.glow-hit{animation:cardReveal .35s ease-out,glowHit 1s ease-out}
+.glow-miss{animation:cardReveal .35s ease-out,glowMiss .8s ease-out}
+@keyframes glowHit{0%{box-shadow:0 0 0 0 rgba(52,211,153,.6)}100%{box-shadow:0 0 0 14px rgba(52,211,153,0)}}
+@keyframes glowMiss{0%{box-shadow:0 0 0 0 rgba(248,113,113,.55)}100%{box-shadow:0 0 0 10px rgba(248,113,113,0)}}
 </style>""", unsafe_allow_html=True)
 
 # ══ 고정 데모 설정 ════════════════════════════════════════════════
@@ -659,6 +693,8 @@ _DEFAULTS = {
     "_vid_pl":               False,   # 저장된 재생 중 여부
     "_demo_auto_loaded":     False,  # 최초 진입 자동 데모 로드 완료 여부 (초기화 버튼으로 리셋 안 됨)
     "_intro_shown":          False,  # 세션당 스플래시 1회만 표시
+    "pred_streak":           0,      # 연속 예측 적중 횟수 (COMBO 배지)
+    "_streak_calc_idx":     -1,      # pred_streak을 마지막으로 갱신한 c_idx (재렌더 중복 방지)
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -894,6 +930,7 @@ if loaded:
         f'</div>'
         # 중앙 (이닝 + 카운트)
         f'<div style="text-align:center;flex:1">'
+        f'<div style="margin-bottom:.35rem"><span class="live-badge">LIVE</span></div>'
         f'<div class="inning-box" style="margin-bottom:.5rem;font-size:.85rem">{half}&nbsp;{cur["inning"]}회</div>'
         f'<div style="display:flex;justify-content:center;align-items:center;gap:1.1rem">'
         f'<div style="display:flex;align-items:center;gap:.32rem">'
@@ -1310,15 +1347,22 @@ if loaded:
 
                 # 이전 예측 적중 여부 — prev(방금 던진 구)와 비교
                 _prev_pred = ""
+                _reveal_cls = "card-reveal"
                 if c_idx > 0 and prev and prev.get("pitch_type"):
                     _pb = _bilstm_preds[c_idx - 1] if (c_idx - 1) < len(_bilstm_preds) else None
                     _prev_pred_type = _pb["next_pitch"] if _pb else _predict_next(pitches, c_idx - 1)["next_pitch"]
                     _hit = _prev_pred_type == prev["pitch_type"]
                     _prev_pred = (f'<span style="font-size:.72rem;color:{"#34d399" if _hit else "#f87171"};'
                                   f'font-weight:700;margin-left:.4rem">{"✓ 예측 적중" if _hit else "✗ 빗나감"}</span>')
+                    _reveal_cls = "glow-hit" if _hit else "glow-miss"
+
+                    # COMBO 스트릭 갱신 — c_idx당 1회만 (재렌더 시 중복 집계 방지)
+                    if c_idx != st.session_state._streak_calc_idx:
+                        st.session_state.pred_streak = (st.session_state.pred_streak + 1) if _hit else 0
+                        st.session_state._streak_calc_idx = c_idx
 
                 st.markdown(
-                    f'<div class="pitch-card" style="background:rgba(15,23,42,.6);border-color:{_m["color"]}44">'
+                    f'<div class="pitch-card {_reveal_cls}" style="background:rgba(15,23,42,.6);border-color:{_m["color"]}44">'
                     f'<div style="display:flex;align-items:center;gap:.8rem">'
                     f'<div style="font-size:2.2rem;line-height:1">{_m["emoji"]}</div>'
                     f'<div style="flex:1">'
@@ -1353,14 +1397,21 @@ if loaded:
                 _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
 
                 _pred_basis = "BiLSTM 모델 예측 — 직전 투구 흐름 기반" if _bilstm_res else "통계 기반 예측 (BiLSTM 계산 중)"
+                if st.session_state.pred_streak >= 2:
+                    st.markdown(
+                        f'<div class="combo-badge">🔥 COMBO x{st.session_state.pred_streak}</div>',
+                        unsafe_allow_html=True)
                 st.markdown(
                     f'<div class="card-badge card-badge-pred">🔮 예측 · {_pred_basis}</div>',
                     unsafe_allow_html=True)
                 st.markdown(
-                    f'<div class="pitch-card pred-hero" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
+                    f'<div class="pitch-card pred-hero card-reveal" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
                     f'rgba(46,27,75,.4));border-color:rgba(167,139,250,.3)">'
                     f'<div style="display:flex;align-items:center;gap:.8rem">'
-                    f'<div style="font-size:2.2rem;line-height:1">{_nm["emoji"]}</div>'
+                    f'<div class="conf-gauge" style="--pct:{_cf*100};--gauge-color:{_cc}">'
+                    f'<span class="conf-gauge-code" style="color:{_cc}">{_nc}</span>'
+                    f'<span class="conf-gauge-pct">{_cf:.0%}</span>'
+                    f'</div>'
                     f'<div style="flex:1">'
                     f'<div class="pitch-code" style="color:{_nm["color"]}">{_nc}</div>'
                     f'<div class="pitch-name">{_nm["name"]}</div>'
