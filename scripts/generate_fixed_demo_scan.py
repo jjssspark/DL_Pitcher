@@ -25,9 +25,8 @@ def main() -> None:
 
     print(f"[1/3] Statcast 투구 수 조회: game_pk={GAME_PK}")
     df = statcast_single_game(GAME_PK)
-    n_pitches   = len(df)
-    max_pitches = int((df["inning"] <= 5).sum())
-    print(f"  총 {n_pitches}구, 1~5이닝 {max_pitches}구")
+    n_pitches = len(df)
+    print(f"  총 {n_pitches}구 (전체 경기 스캔 — 이닝 제한 없음)")
 
     print(f"[2/3] 영상 다운로드: {VIDEO_URL}")
     cache_dir  = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
@@ -35,10 +34,11 @@ def main() -> None:
     video_path = resolve_video_path(VIDEO_URL, download_dir=cache_dir)
     print(f"  다운로드 완료: {video_path}")
 
-    print("[3/3] 방송 오버레이 OCR 스캔 (1~5이닝)...")
+    print("[3/3] 방송 오버레이 OCR 스캔 (전체 경기)...")
+    # max_pitches=0 → 조기 종료 없이 영상 끝까지 스캔 (오프라인 1회 생성이라 시간 제약 없음)
     pitch_times, pitch_data = scan_pitch_overlays(
         video_path, expected_count=n_pitches,
-        max_pitches=max_pitches, skip_start_sec=0.0,
+        max_pitches=0, skip_start_sec=0.0,
     )
     print(f"  {len(pitch_times)}개 투구 타임스탬프 감지")
 

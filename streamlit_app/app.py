@@ -640,7 +640,6 @@ _DEFAULTS = {
     "_pose_task_id":         None,   # 투구 감지 태스크
     "_pose_last_check_time": -99.0,  # 마지막 포즈 체크 시각
     "_last_pitch_video_time": 0.0,  # 처음 12초 자동 쿨다운 (영상 로딩 false positive 방지)
-    "detected_pitch_times":  {},     # {pitch_idx: video_time}
     "seek_to":               None,
     "is_playing":            False,
     "video_synced":          False,
@@ -1084,8 +1083,17 @@ if loaded:
                     _sinfo   = _vraw[_nsi] if _nsi < len(_vraw) else {}
                     _stype   = _sinfo.get("pitch_type")
 
-                    # 순차 전진 — 캐시 pitch_count OCR 오독으로 잘못된 점프 방지
+                    # 순차 전진 기본값 — 잘못된 OCR 점프 방지
                     _bidx = min(_last_m + 1, len(pitches) - 1)
+
+                    # P:N 카운터가 _pitcher_p_map(신뢰 가능한 매핑)에 존재하고 순차 전진보다
+                    # 앞선 위치를 가리키면 그쪽으로 점프 — 희소한 감지로 인한 드리프트 보정.
+                    # 절대 뒤로는 안 가고(오독으로 인한 역행 방지), 앞으로만 따라잡는다.
+                    _pcount = _sinfo.get("pitch_count")
+                    if _pcount and _pcount in _pitcher_p_map:
+                        _mapped_idx = min(_pitcher_p_map[_pcount], len(pitches) - 1)
+                        if _mapped_idx > _bidx:
+                            _bidx = _mapped_idx
 
                     # 스캔 OCR 실패 시 MLB 데이터로 보완
                     if not _stype and _bidx < len(pitches):
@@ -1141,18 +1149,7 @@ if loaded:
         if loaded:
             st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
 
-            _det_times   = st.session_state.get("detected_pitch_times", {})
             _local_ready = bool(st.session_state.get("_local_video_path"))
-
-            if st.button("← 이전 투구 다시보기", use_container_width=True):
-                if c_idx > 0:
-                    st.session_state.current_pitch_idx -= 1
-                    c_idx -= 1
-                    _t = _det_times.get(c_idx)
-                    if _t is not None:
-                        st.session_state.seek_to = _t
-                st.session_state.video_synced = True
-                st.rerun()
 
             _pose_active = bool(st.session_state.get("_pose_task_id"))
             _scan_st_note = st.session_state.get("_scan_status", "idle")
