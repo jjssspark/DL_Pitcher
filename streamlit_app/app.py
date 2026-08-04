@@ -1112,6 +1112,18 @@ if loaded:
                 st.session_state.video_synced = True
                 st.rerun()
 
+            _bp, _bn = st.columns(2)
+            with _bp:
+                if st.button("◀ 이전 투구", use_container_width=True, disabled=(c_idx <= 0)):
+                    st.session_state.current_pitch_idx = c_idx - 1
+                    st.session_state.video_synced = True
+                    st.rerun()
+            with _bn:
+                if st.button("다음 투구 ▶", use_container_width=True, disabled=(c_idx >= len(pitches) - 1)):
+                    st.session_state.current_pitch_idx = c_idx + 1
+                    st.session_state.video_synced = True
+                    st.rerun()
+
             # 최근 투구 리스트
             st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
             _start = max(0, c_idx - 7)
