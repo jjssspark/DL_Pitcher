@@ -105,11 +105,41 @@ div[data-testid="stButton"]>button{
 div[data-testid="stButton"]>button:hover{opacity:.82!important}
 [data-testid="stFileUploader"]{border:1.5px dashed rgba(59,130,246,.3)!important;
   border-radius:10px!important;background:rgba(15,23,42,.4)!important}
+
+/* 랜딩 스플래시 */
+.intro-splash{position:fixed;inset:0;background:#080e1a;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;gap:1rem;z-index:9999}
+.intro-splash .intro-logo{font-size:3.4rem;font-weight:900;letter-spacing:-.02em;
+  background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399);-webkit-background-clip:text;
+  -webkit-text-fill-color:transparent;background-clip:text;animation:introPulse 1.4s ease-in-out infinite}
+.intro-splash .intro-tagline{font-size:1rem;color:#94a3b8}
+.intro-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .9rem;
+  border-radius:999px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);
+  color:#f87171;font-size:.78rem;font-weight:700;letter-spacing:.04em}
+.intro-badge::before{content:"";width:7px;height:7px;border-radius:50%;background:#ef4444;
+  animation:introPulse 1.1s ease-in-out infinite}
+@keyframes introPulse{0%,100%{opacity:1}50%{opacity:.45}}
+
+/* 스코어보드 강화 */
+.seg-dot{display:inline-block;width:13px;height:13px;border-radius:3px;margin:0 2px}
+.team-score{font-size:2.1rem}
+
+/* 보조 카드 / 카드 배지 */
+.panel-secondary{background:rgba(15,23,42,.5);border:1px solid rgba(59,130,246,.08);
+  border-radius:10px;padding:.8rem 1rem;margin-bottom:.65rem}
+.panel-secondary .panel-title{font-size:.66rem}
+.card-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.66rem;font-weight:700;
+  letter-spacing:.06em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;margin-bottom:.4rem}
+.card-badge-pred{background:rgba(167,139,250,.14);color:#c4b5fd;border:1px solid rgba(167,139,250,.35)}
+.card-badge-actual{background:rgba(52,211,153,.12);color:#6ee7b7;border:1px solid rgba(52,211,153,.3)}
+.pred-hero{border-width:1.5px!important;padding:1.3rem 1.5rem!important}
+.pred-hero .pitch-code{font-size:3rem!important}
 </style>""", unsafe_allow_html=True)
 
 # ══ 고정 데모 설정 ════════════════════════════════════════════════
 FIXED_DEMO_GAME_PK   = 775300
 FIXED_DEMO_VIDEO_URL = "https://youtu.be/gMm3EODDb6w"
+TEAM_COLORS = {"NYY": "#0C2340", "LAD": "#005A9C"}  # 고정 데모 게임은 이 두 팀만 등장
 
 # ══ 구종 메타 ══════════════════════════════════════════════════════
 PITCH_META = {
@@ -409,6 +439,14 @@ def _count_dots_simple(n, total, color_on, color_off="rgba(100,116,139,.2)"):
     return dots
 
 
+def _seg_dots(n: int, total: int, color_on: str, color_off: str = "rgba(100,116,139,.2)") -> str:
+    dots = ""
+    for i in range(total):
+        c = color_on if i < n else color_off
+        dots += f'<span class="seg-dot" style="background:{c}"></span>'
+    return dots
+
+
 def _score_color(diff: int) -> str:
     if diff > 0: return "#34d399"
     if diff < 0: return "#f87171"
@@ -549,6 +587,15 @@ def _load_game(gk_str: str) -> tuple[bool, str]:
         return False, f"로드 실패: {_e}"
 
 
+def _render_intro_splash() -> None:
+    st.markdown(
+        '<div class="intro-splash">'
+        '<div class="intro-logo">⚾ PitchIQ</div>'
+        '<div class="intro-tagline">MLB 실시간 투구 분석 &amp; 다음 구종 예측 시스템</div>'
+        '<div class="intro-badge">LIVE 데모 준비 중</div>'
+        '</div>', unsafe_allow_html=True)
+
+
 def _scan_cache_path(video_path: str, version: str) -> str:
     import hashlib
     key = hashlib.md5(f"{video_path}|{version}".encode()).hexdigest()[:12]
@@ -611,6 +658,7 @@ _DEFAULTS = {
     "_vid_t_wall":           0.0,     # _vid_t 수신 당시 벽시계 (wall clock)
     "_vid_pl":               False,   # 저장된 재생 중 여부
     "_demo_auto_loaded":     False,  # 최초 진입 자동 데모 로드 완료 여부 (초기화 버튼으로 리셋 안 됨)
+    "_intro_shown":          False,  # 세션당 스플래시 1회만 표시
 }
 for _k, _v in _DEFAULTS.items():
     if _k not in st.session_state:
@@ -620,12 +668,18 @@ for _k, _v in _DEFAULTS.items():
 # game_pk가 비어있고(한 번도 로드 안 됨) 아직 자동로드를 시도한 적 없을 때만 1회 실행.
 # "초기화" 버튼은 _demo_auto_loaded를 리셋하지 않으므로 재자동로드되지 않는다.
 if not st.session_state._demo_auto_loaded and st.session_state.game_pk == "":
-    st.session_state._demo_auto_loaded = True
-    st.session_state.video_src = FIXED_DEMO_VIDEO_URL
-    st.session_state.is_playing = True  # iframe autoplay와 상태 일치 — 다음 rerun에서 pauseVideo() 방지
-    _demo_ok, _demo_msg = _load_game(str(FIXED_DEMO_GAME_PK))
-    if not _demo_ok:
-        print(f"[FixedDemo] 자동 로드 실패: {_demo_msg}")
+    if not st.session_state._intro_shown:
+        st.session_state._intro_shown = True
+        _render_intro_splash()
+        time.sleep(1.4)
+        st.rerun()
+    else:
+        st.session_state._demo_auto_loaded = True
+        st.session_state.video_src = FIXED_DEMO_VIDEO_URL
+        st.session_state.is_playing = True  # iframe autoplay와 상태 일치 — 다음 rerun에서 pauseVideo() 방지
+        _demo_ok, _demo_msg = _load_game(str(FIXED_DEMO_GAME_PK))
+        if not _demo_ok:
+            print(f"[FixedDemo] 자동 로드 실패: {_demo_msg}")
 
 # 앱 재로드 후 _pose_tasks 사라진 경우: 캐시 디렉토리에서 영상 파일 자동 감지
 _cache_dir = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
@@ -825,8 +879,7 @@ def _render_landing_hero() -> None:
         '</div>'
         '</div>'
         '</div>', unsafe_allow_html=True)
-    st.info("💡 왼쪽 사이드바에서 **game_pk**를 입력하고 경기 로드를 눌러보세요 — 예시: **745735** "
-            "(2024년 6월 8일 LAD @ NYY)", icon="⚾")
+    st.info("💡 데이터 로드에 실패했습니다. 페이지를 새로고침해 다시 시도해보세요.", icon="⚾")
 
 
 # ══ 메인 헤더 ═════════════════════════════════════════════════════
@@ -837,9 +890,11 @@ if loaded:
     aw, hw = cur["away_team"], cur["home_team"]
     aws, hws = cur["away_score"], cur["home_score"]
 
-    balls_html   = _count_dots_simple(cur["balls"],   3, "#3b82f6")
-    strikes_html = _count_dots_simple(cur["strikes"], 2, "#f59e0b")
-    outs_html    = _count_dots_simple(cur["outs"],    2, "#ef4444")
+    balls_html   = _seg_dots(cur["balls"],   3, "#3b82f6")
+    strikes_html = _seg_dots(cur["strikes"], 2, "#f59e0b")
+    outs_html    = _seg_dots(cur["outs"],    2, "#ef4444")
+    _aw_color    = TEAM_COLORS.get(aw, "#94a3b8")
+    _hw_color    = TEAM_COLORS.get(hw, "#94a3b8")
 
     st.markdown(
         f'<div class="scoreboard">'
@@ -847,7 +902,8 @@ if loaded:
         # 원정팀
         f'<div style="text-align:center;min-width:72px">'
         f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">원정</div>'
-        f'<div style="font-size:.8rem;font-weight:800;color:#94a3b8;letter-spacing:.08em">{aw}</div>'
+        f'<div style="font-size:.8rem;font-weight:800;color:{_aw_color};letter-spacing:.08em;'
+        f'border-bottom:2px solid {_aw_color};padding-bottom:.15rem;display:inline-block">{aw}</div>'
         f'<div class="team-score" style="color:{"#f1f5f9" if aws >= hws else "#475569"}">{aws}</div>'
         f'</div>'
         # 중앙 (이닝 + 카운트)
@@ -869,7 +925,8 @@ if loaded:
         # 홈팀
         f'<div style="text-align:center;min-width:72px">'
         f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">홈</div>'
-        f'<div style="font-size:.8rem;font-weight:800;color:#94a3b8;letter-spacing:.08em">{hw}</div>'
+        f'<div style="font-size:.8rem;font-weight:800;color:{_hw_color};letter-spacing:.08em;'
+        f'border-bottom:2px solid {_hw_color};padding-bottom:.15rem;display:inline-block">{hw}</div>'
         f'<div class="team-score" style="color:{"#f1f5f9" if hws >= aws else "#475569"}">{hws}</div>'
         f'</div>'
         f'</div></div>',
@@ -1210,7 +1267,7 @@ if loaded:
             # ── 투수 / 타자 정보 ──
             batting_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
             st.markdown(
-                f'<div class="panel">'
+                f'<div class="panel-secondary">'
                 f'<div class="panel-title">투수 · 타자</div>'
                 f'<div style="display:flex;gap:.6rem;margin-bottom:.5rem">'
                 f'<div style="flex:1">'
@@ -1278,6 +1335,7 @@ if loaded:
                     unsafe_allow_html=True)
 
             # ── 방금 던진 구종 ──
+            st.markdown('<div class="card-badge card-badge-actual">📊 실측</div>', unsafe_allow_html=True)
             st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
 
             _vpd = st.session_state.get("video_pitch_data", [])
@@ -1340,24 +1398,21 @@ if loaded:
             if True:
                 _bilstm_res = _bilstm_preds[c_idx] if c_idx < len(_bilstm_preds) else None
                 if _bilstm_res:
-                    pred      = _bilstm_res
-                    src_badge = '<span class="badge badge-pred">BiLSTM</span>'
+                    pred = _bilstm_res
                 else:
-                    pred      = _predict_next(pitches, c_idx)
-                    src_badge = '<span class="badge badge-sim">통계</span>'
+                    pred = _predict_next(pitches, c_idx)
 
                 _nc  = pred["next_pitch"]
                 _nm  = PITCH_META.get(_nc, PITCH_META["OTHER"])
                 _cf  = pred["confidence"]
                 _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
 
+                _pred_basis = "BiLSTM 모델 예측 — 직전 투구 흐름 기반" if _bilstm_res else "통계 기반 예측 (BiLSTM 계산 중)"
                 st.markdown(
-                    f'<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;'
-                    f'text-transform:uppercase;color:#64748b;margin:.2rem 0 .35rem">'
-                    f'다음 투구 예측 {src_badge}</div>',
+                    f'<div class="card-badge card-badge-pred">🔮 예측 · {_pred_basis}</div>',
                     unsafe_allow_html=True)
                 st.markdown(
-                    f'<div class="pitch-card" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
+                    f'<div class="pitch-card pred-hero" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
                     f'rgba(46,27,75,.4));border-color:rgba(167,139,250,.3)">'
                     f'<div style="display:flex;align-items:center;gap:.8rem">'
                     f'<div style="font-size:2.2rem;line-height:1">{_nm["emoji"]}</div>'
