@@ -979,33 +979,23 @@ else:
 # ── 왼쪽: 영상 + 내비게이션 ──────────────────────────────────────
 if loaded:
     with col_video:
-        # YouTube URL인지 확인 후 iframe 임베드
-        import re as _re
         _vsrc = st.session_state.video_src
-        def _yt_id(url):
-            if not url: return None
-            m = _re.search(r"(?:v=|youtu\.be/)([\w-]{11})", str(url))
-            return m.group(1) if m else None
-
-        _yt = _yt_id(_vsrc)
         _local_play_path = st.session_state.get("_local_video_path")
         _use_local_player = bool(_local_play_path and os.path.exists(_local_play_path))
 
-        # 로컬 파일 우선 → 스캔 캐시와 타임라인이 정확히 일치
-        # 로컬 없을 때만 YouTube 플레이어 폴백
-        if _use_local_player or _yt:
+        # 로컬 파일 재생 시에만 커스텀 플레이어(JS 이벤트 기반 자동 싱크) 사용.
+        # YouTube는 iframe-in-iframe 구조에서 임베드 오류(153)가 나 재생 자체가
+        # 안 되는 경우가 있어 Streamlit 기본 st.video()로 단순화 — 대신 실시간
+        # 자동 싱크는 포기하고 아래 슬라이더로 수동 이동한다.
+        if _use_local_player:
             sys.path.insert(0, os.path.join(ROOT, "streamlit_app"))
             _seek_to    = st.session_state.get("seek_to")
             _is_playing = st.session_state.get("is_playing", False)
 
-            if _use_local_player:
-                from local_video_player import local_video_player as _lvp
-                _vport     = _get_video_server(os.path.dirname(os.path.abspath(_local_play_path)))
-                _video_url = f"http://localhost:{_vport}/{os.path.basename(_local_play_path)}"
-                _yt_result = _lvp(video_url=_video_url, seek_to=_seek_to, is_playing=_is_playing, key="local_main")
-            else:
-                from youtube_player import youtube_player as _yt_player
-                _yt_result = _yt_player(video_id=_yt, start_sec=0, seek_to=_seek_to, is_playing=_is_playing, key="yt_main")
+            from local_video_player import local_video_player as _lvp
+            _vport     = _get_video_server(os.path.dirname(os.path.abspath(_local_play_path)))
+            _video_url = f"http://localhost:{_vport}/{os.path.basename(_local_play_path)}"
+            _yt_result = _lvp(video_url=_video_url, seek_to=_seek_to, is_playing=_is_playing, key="local_main")
 
             if _seek_to is not None:
                 st.session_state.seek_to = None
@@ -1080,7 +1070,7 @@ if loaded:
                     st.session_state._pose_last_check_time = _ocr_vid_t
         elif _vsrc:
             _current_video_time = None
-            st.video(_vsrc)
+            st.video(_vsrc, autoplay=True, muted=True)
         else:
             _current_video_time = None
             st.markdown(
@@ -1106,10 +1096,10 @@ if loaded:
             elif _pose_active:
                 _sync_note = "🔍 투구 모션 감지 중..."
             elif not _local_ready:
-                _sync_note = "YouTube URL을 입력하세요"
+                _sync_note = "아래 슬라이더로 투구를 이동하세요"
             else:
                 _sync_note = ""
-            _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | " if st.session_state.get("_sync_activated") else ""
+            _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | "
             if _sync_note:
                 st.caption(f"{_pitch_label}{_sync_note}")
 
