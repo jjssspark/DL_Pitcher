@@ -1,5 +1,6 @@
 """OCR 타임스탐프와 Statcast 정답을 페어링해 학습용 데이터셋을 조립한다."""
 import logging
+from dataclasses import dataclass
 from typing import Callable
 
 import pandas as pd
@@ -64,3 +65,37 @@ def build_dataset_for_game(
         })
 
     return pd.DataFrame(rows)
+
+
+@dataclass
+class GameSpec:
+    game_pk: int
+    youtube_url: str
+
+
+def build_dataset(
+    games: list[GameSpec],
+    fetch_statcast: Callable[[int], pd.DataFrame],
+    resolve_video: Callable[[str], str],
+    scan_overlays: Callable[[str], tuple[list[float], list[dict]]],
+    extract_trajectory: Callable[[str, float], list[tuple[float, float]]],
+) -> pd.DataFrame:
+    """
+    여러 경기의 데이터셋을 조립한다. 개별 경기 처리 중 예외가 나면 그 경기만 건너뛰고
+    나머지는 계속 처리한다 (네트워크 실패, OCR 실패 등에 대비).
+    """
+    frames = []
+    for game in games:
+        try:
+            frames.append(
+                build_dataset_for_game(
+                    game.game_pk, game.youtube_url,
+                    fetch_statcast, resolve_video, scan_overlays, extract_trajectory,
+                )
+            )
+        except Exception as exc:
+            logger.warning("게임 %s 처리 실패, 건너뜁니다: %s", game.game_pk, exc)
+
+    if not frames:
+        return pd.DataFrame()
+    return pd.concat(frames, ignore_index=True)

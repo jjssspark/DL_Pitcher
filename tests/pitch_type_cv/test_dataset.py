@@ -79,3 +79,42 @@ def test_build_dataset_for_game_excludes_short_trajectories():
 
     assert len(df) == 1
     assert df.iloc[0]["group"] == "FASTBALL"
+
+
+from pitch_type_cv.dataset import GameSpec, build_dataset
+
+
+def test_build_dataset_skips_failing_game_and_keeps_others(caplog):
+    good_statcast = pd.DataFrame({"pitch_type": ["FF"]})
+    trajectory = [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]
+
+    def fetch_statcast(game_pk: int) -> pd.DataFrame:
+        if game_pk == 111:
+            raise RuntimeError("Statcast 조회 실패")
+        return good_statcast
+
+    with caplog.at_level(logging.WARNING):
+        df = build_dataset(
+            games=[GameSpec(game_pk=111, youtube_url="https://youtu.be/bad"),
+                   GameSpec(game_pk=222, youtube_url="https://youtu.be/good")],
+            fetch_statcast=fetch_statcast,
+            resolve_video=lambda url: "fake_video.mp4",
+            scan_overlays=lambda video_path: ([1.0], []),
+            extract_trajectory=lambda video_path, ts: trajectory,
+        )
+
+    assert len(df) == 1
+    assert df.iloc[0]["game_pk"] == 222
+    assert any("111" in r.message for r in caplog.records)
+
+
+def test_build_dataset_returns_empty_dataframe_when_all_games_fail():
+    df = build_dataset(
+        games=[GameSpec(game_pk=111, youtube_url="https://youtu.be/bad")],
+        fetch_statcast=lambda game_pk: (_ for _ in ()).throw(RuntimeError("fail")),
+        resolve_video=lambda url: "fake_video.mp4",
+        scan_overlays=lambda video_path: ([], []),
+        extract_trajectory=lambda video_path, ts: [],
+    )
+
+    assert df.empty
