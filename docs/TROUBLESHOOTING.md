@@ -5,6 +5,9 @@
 
 ## 인덱스
 
+TS-010 (2026-08-05, Infra, 심각도 Medium, 상태 해결됨)
+git worktree로 전환하기 직전 커밋 없이 작성한 파일(계획 문서)이 워크트리에는 보이지 않아 유실
+
 TS-009 (2026-08-04, FE, 심각도 High, 상태 우회 적용)
 Streamlit 컴포넌트 안에 YouTube iframe을 재중첩해 오류 153으로 영상 재생 자체가 안 됨
 
@@ -121,6 +124,8 @@ requirements.txt 자체는 pip freeze에 의존하지 않고, site-packages의 *
 
 배운 점
 venv의 콘솔 스크립트(pip, ipython 등)는 인터프리터 경로가 생성 시점에 고정된다. venv 폴더(또는 상위 프로젝트 폴더)를 옮기면 항상 깨진다고 가정해야 하고, python -m pip 형태로 인터프리터를 직접 호출하면 임시 우회가 가능하다.
+
+재발 (2026-08-05) - 같은 venv를 git worktree(`.claude/worktrees/pitch-type-cv-classifier/venv` 심볼릭 링크)에서 참조했을 때 `venv/bin/jupyter`, `venv/bin/pip`가 동일하게 `bad interpreter` 에러로 깨져 있는 것을 재확인. `venv/bin/python3 -m nbconvert`, `venv/bin/python3 -m pip`처럼 `python3 -m <module>` 형태로 우회해 해결 — 근본 원인과 우회법 모두 이 항목과 동일.
 
 ---
 
@@ -412,3 +417,40 @@ streamlit_app/app.py의 영상 렌더링 분기 수정 — 로컬 파일 재생(
 
 배운 점
 Streamlit components.v1.declare_component로 만든 컴포넌트는 그 자체가 이미 하나의 iframe이라, 그 안에서 또 다른 서드파티 iframe(YouTube 등)을 API 기반으로 제어하려 하면 "iframe 안의 iframe"이 되어 origin 검증에 실패할 수 있다. 서드파티 임베드는 가능하면 최상위 페이지에 가장 가까운 곳에서 렌더링하거나, 프레임워크가 제공하는 네이티브 위젯이 있다면 커스텀 컴포넌트보다 그걸 먼저 검토하는 게 안전하다.
+
+---
+
+## TS-010 · git worktree로 전환하기 직전 커밋 없이 작성한 파일이 워크트리에는 보이지 않아 유실
+
+날짜: 2026-08-05
+영역: Infra
+심각도: Medium
+상태: 해결됨
+
+증상
+브레인스토밍 스킬로 설계 문서를 작성·커밋한 뒤, 이어서 구현 계획 문서(`docs/superpowers/plans/2026-08-05-pitch-type-cv-classifier-pilot.md`)를 메인 체크아웃에 Write로 작성했다. 곧바로 `EnterWorktree`로 격리된 작업공간으로 전환한 뒤 `sdd-workspace` 스크립트로 그 계획 파일을 읽으려 하자 `no such plan file` 에러가 났다.
+
+재현 조건
+환경: 같은 저장소 안에서 Write 도구로 새 파일 생성 → git add/commit 하지 않은 상태 → EnterWorktree(name=...)로 새 워크트리 진입.
+재현율: 항상 (커밋 없이 작성한 파일이 있는 상태에서 워크트리 전환 시).
+
+원인
+표면 - 방금 만든 파일이 새 워크트리 디렉터리에 없다.
+근본 - git worktree는 같은 `.git` 객체 저장소를 공유하지만 워크트리마다 독립된 작업 디렉터리(파일시스템)를 갖는다. 커밋되지 않은 워킹트리 변경분은 git 객체가 아니라 순수 파일시스템 상태이므로, 다른 워크트리에서는 애초에 존재할 방법이 없다. `EnterWorktree`는 브랜치(커밋 이력) 기준으로 워크트리를 만들 뿐, 원본 체크아웃의 미커밋 변경분을 복사해오지 않는다.
+확인 방법 - 워크트리 진입 후 `ls docs/superpowers/plans/`로 해당 파일이 없는 것을 확인, `git status --short`로 원본 체크아웃 쪽에는 아직 untracked 상태로 남아있었을 것으로 추정(직접 재확인은 샌드박스 제약으로 워크트리 세션에서 다른 워크트리 경로에 대해 `git -C`를 쓸 수 없어 못함).
+
+시도했지만 안 된 것
+없음 — 원인이 명확해서 바로 우회로 넘어감.
+
+해결
+같은 내용을 워크트리 안에서 Write로 다시 작성하고 그 자리에서 커밋했다. 이후 `sdd-workspace`/`task-brief` 스크립트가 정상적으로 파일을 찾음.
+
+검증
+`sdd-workspace docs/superpowers/plans/...pilot.md` 재실행 시 정상적으로 워크스페이스 경로 출력, 이후 태스크별 `task-brief` 생성도 문제없이 진행됨.
+
+추후 관리
+재발 방지 - 앞으로 이런 워크플로(브레인스토밍 → writing-plans → subagent-driven-development)를 이어서 진행할 때는, 워크트리 전환 직전에 만든 파일은 반드시 커밋까지 마치고 나서 EnterWorktree를 호출한다.
+남은 리스크 - 없음. 다만 workflow 스킬 문서 자체에는 이 순서 의존성이 명시돼 있지 않아, 다른 세션에서도 동일하게 재발할 수 있다.
+
+배운 점
+git worktree는 "같은 저장소의 다른 브랜치를 보는 창"이지 "같은 작업 디렉터리의 스냅샷"이 아니다. 커밋되지 않은 파일은 그 워크트리에만 속한다. 워크트리 도구(EnterWorktree 등)로 전환하기 직전에는 "지금 만든 파일을 커밋했는가"를 항상 체크리스트로 확인해야 한다.
