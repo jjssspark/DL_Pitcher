@@ -102,6 +102,45 @@ def test_frames_in_window_does_not_truncate_on_high_fps_video(synthetic_video_60
     assert len(frames) > 90
 
 
+def test_sampling_step_rounds_ntsc_framerate_to_nearest_integer():
+    from pitch_type_cv.trajectory_features import _sampling_step
+
+    # NTSC 59.94fps를 30fps로 → 59.94/30 = 1.998. 내림하면 1이 되어 샘플링이 통째로
+    # 무효화되므로 반올림해야 한다 (실제 720p 다운로드가 정확히 이 케이스)
+    assert _sampling_step(59.94, 30.0) == 2
+    assert _sampling_step(29.97, 30.0) == 1
+    assert _sampling_step(30.0, 60.0) == 1   # 업샘플링은 불가
+    assert _sampling_step(59.94, None) == 1  # 샘플링 비활성
+
+
+def test_frames_in_window_subsamples_to_target_fps(synthetic_video_60fps):
+    from pitch_type_cv.trajectory_features import frames_in_window
+
+    kwargs = dict(
+        timestamp_sec=3.0, lookback_start_sec=3.0, lookback_end_sec=0.3,
+    )
+    full = frames_in_window(synthetic_video_60fps, **kwargs)
+    halved = frames_in_window(synthetic_video_60fps, target_fps=30.0, **kwargs)
+
+    # 60fps 영상을 30fps로 샘플링 → 매 2번째 프레임만 (163 → 82)
+    assert len(halved) == math.ceil(len(full) / 2)
+
+
+def test_frames_in_window_does_not_upsample_when_target_fps_exceeds_video_fps(
+    synthetic_video,
+):
+    from pitch_type_cv.trajectory_features import frames_in_window
+
+    kwargs = dict(
+        timestamp_sec=3.0, lookback_start_sec=2.0, lookback_end_sec=0.5,
+    )
+    baseline = frames_in_window(synthetic_video, **kwargs)
+    requested = frames_in_window(synthetic_video, target_fps=60.0, **kwargs)
+
+    # 30fps 영상에 60fps를 요구해도 프레임을 늘릴 수는 없다 — 그대로여야 한다
+    assert len(requested) == len(baseline)
+
+
 def test_frames_in_window_returns_empty_list_for_invalid_path():
     from pitch_type_cv.trajectory_features import frames_in_window
 

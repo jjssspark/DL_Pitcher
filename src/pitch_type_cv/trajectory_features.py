@@ -66,25 +66,43 @@ def compute_trajectory_features(
     }
 
 
+def _sampling_step(fps: float, target_fps: float | None) -> int:
+    """
+    target_fps에 가장 가까운 정수 프레임 간격. NTSC 계열 영상은 59.94/29.97처럼 정수
+    배수에서 미세하게 어긋나므로 내림이 아니라 반올림해야 한다 — 59.94/30 = 1.998을
+    내림하면 1이 되어 샘플링이 통째로 무효화된다. 1 미만(업샘플링 요구)은 1로 묶는다.
+    """
+    if not target_fps:
+        return 1
+    return max(1, round(fps / target_fps))
+
+
 def frames_in_window(
     video_path: str,
     timestamp_sec: float,
     lookback_start_sec: float = 3.0,
     lookback_end_sec: float = 0.3,
     max_frames: int = 90,
+    target_fps: float | None = None,
 ) -> list[np.ndarray]:
     """
     timestamp_sec 기준 (timestamp_sec - lookback_start_sec) ~ (timestamp_sec - lookback_end_sec)
     구간의 프레임을 모두 추출한다. 영상을 열 수 없으면 빈 리스트.
+
+    target_fps를 주면 그 프레임레이트에 맞춰 균등 샘플링한다 (60fps 영상 + target 30fps
+    → 매 2번째 프레임). 같은 시간 구간을 소스 fps와 무관하게 일정한 프레임 수로 처리해,
+    고프레임레이트 영상에서 감지 비용이 배로 늘어나는 것을 막는다. 프레임 수를 늘리지는
+    않으므로 영상 fps보다 높은 값을 줘도 원본 그대로 반환한다.
     """
     cap = cv2.VideoCapture(video_path)
     if not cap.isOpened():
         return []
 
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    step = _sampling_step(fps, target_fps)
     start_frame = max(0, int((timestamp_sec - lookback_start_sec) * fps))
     end_frame = max(start_frame, int((timestamp_sec - lookback_end_sec) * fps))
-    min_required_frames = end_frame - start_frame + 1
+    min_required_frames = (end_frame - start_frame) // step + 1
     effective_max_frames = max(max_frames, min_required_frames)
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
@@ -92,10 +110,14 @@ def frames_in_window(
     frames: list[np.ndarray] = []
     frame_idx = start_frame
     while frame_idx <= end_frame and len(frames) < effective_max_frames:
-        ret, frame = cap.read()
-        if not ret:
+        # 건너뛸 프레임은 grab()만 호출해 BGR 변환·복사 비용을 생략한다
+        if not cap.grab():
             break
-        frames.append(frame)
+        if (frame_idx - start_frame) % step == 0:
+            ret, frame = cap.retrieve()
+            if not ret:
+                break
+            frames.append(frame)
         frame_idx += 1
 
     cap.release()
@@ -127,12 +149,17 @@ def extract_trajectory_window(
     model,
     lookback_start_sec: float = 3.0,
     lookback_end_sec: float = 0.3,
+    target_fps: float | None = None,
 ) -> list[tuple[float, float]]:
     """
     OCR 타임스탬프 구간의 공 궤적을 추출한다.
     model: yolo_detector.load_model()로 로드한 YOLO 모델.
+    target_fps: 감지 대상 프레임 샘플링 레이트 (frames_in_window 참고).
     """
     from yolo_detector import detect_ball_in_frame  # 지연 import: 순수 함수는 ultralytics에 비의존
 
-    frames = frames_in_window(video_path, timestamp_sec, lookback_start_sec, lookback_end_sec)
+    frames = frames_in_window(
+        video_path, timestamp_sec, lookback_start_sec, lookback_end_sec,
+        target_fps=target_fps,
+    )
     return trajectory_from_frames(frames, lambda f: detect_ball_in_frame(model, f))
