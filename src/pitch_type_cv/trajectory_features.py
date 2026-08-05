@@ -84,12 +84,14 @@ def frames_in_window(
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     start_frame = max(0, int((timestamp_sec - lookback_start_sec) * fps))
     end_frame = max(start_frame, int((timestamp_sec - lookback_end_sec) * fps))
+    min_required_frames = end_frame - start_frame + 1
+    effective_max_frames = max(max_frames, min_required_frames)
 
     cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
 
     frames: list[np.ndarray] = []
     frame_idx = start_frame
-    while frame_idx <= end_frame and len(frames) < max_frames:
+    while frame_idx <= end_frame and len(frames) < effective_max_frames:
         ret, frame = cap.read()
         if not ret:
             break

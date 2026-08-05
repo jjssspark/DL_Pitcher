@@ -76,6 +76,32 @@ def test_frames_in_window_returns_expected_frame_count(synthetic_video):
     assert frames[0].shape == (32, 32, 3)
 
 
+@pytest.fixture
+def synthetic_video_60fps(tmp_path):
+    """60fps, 32x32 합성 비디오 파일 생성 (약 200프레임, ~3.3초 분량)."""
+    path = str(tmp_path / "synthetic_60fps.mp4")
+    fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+    writer = cv2.VideoWriter(path, fourcc, 60.0, (32, 32))
+    for _ in range(200):
+        writer.write(np.zeros((32, 32, 3), dtype=np.uint8))
+    writer.release()
+    return path
+
+
+def test_frames_in_window_does_not_truncate_on_high_fps_video(synthetic_video_60fps):
+    from pitch_type_cv.trajectory_features import frames_in_window
+
+    # timestamp_sec=3.0, 기본 lookback(3.0~0.3초 전) → start_frame=0, end_frame=162 → 163프레임 필요
+    frames = frames_in_window(
+        synthetic_video_60fps, timestamp_sec=3.0,
+        lookback_start_sec=3.0, lookback_end_sec=0.3,
+    )
+
+    # 하드코딩된 max_frames=90 캡에 걸리면 90개에서 잘린다 — 그보다 많이 반환돼야 함
+    assert len(frames) >= 160
+    assert len(frames) > 90
+
+
 def test_frames_in_window_returns_empty_list_for_invalid_path():
     from pitch_type_cv.trajectory_features import frames_in_window
 
