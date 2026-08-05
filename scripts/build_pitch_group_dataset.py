@@ -4,6 +4,7 @@ CV 구종 그룹 분류기 파일럿 — 학습용 데이터셋 생성.
 
 GAME_LIST에 Fox 중계 + YouTube에 영상이 있는 game_pk 5-10개를 직접 채운 뒤 실행한다.
 """
+import json
 import os
 import sys
 
@@ -39,6 +40,7 @@ DETECT_FPS = 30.0
 CACHE_DIR = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
 OUT_DIR = os.path.join(ROOT, "output", "pitch_type_cv")
 OUT_PATH = os.path.join(OUT_DIR, "dataset.csv")
+OCR_CACHE_DIR = os.path.join(OUT_DIR, "ocr_cache")
 
 
 def resolve_video_hq(url: str) -> str:
@@ -81,6 +83,38 @@ def resolve_video_hq(url: str) -> str:
     return out_path
 
 
+def scan_overlays_cached(video_path: str) -> tuple[list[float], list[dict]]:
+    """
+    OCR 스캔 결과를 캐시해 재실행 시 건너뛴다. 전체 영상 스캔이 궤적 추출보다 오래
+    걸리는데 매 실행마다 처음부터 다시 돌기 때문이다.
+
+    한계: 완료된 스캔만 저장한다. 스캔 도중 중단되면 그 경기 진행분은 남지 않는다.
+    scan_pitch_overlays가 호출마다 해시 상태를 초기화해 첫 샘플 프레임에서 무조건
+    OCR을 트리거하므로, skip_start_sec으로 구간을 쪼개 이어붙이면 경계마다 가짜 검출이
+    생겨 Statcast 순서 페어링이 밀린다 — 부분 재개를 일부러 지원하지 않는 이유다.
+    """
+    from pose_detector import scan_pitch_overlays
+
+    key = os.path.splitext(os.path.basename(video_path))[0]
+    cache_path = os.path.join(OCR_CACHE_DIR, f"{key}.json")
+
+    if os.path.exists(cache_path):
+        with open(cache_path, encoding="utf-8") as f:
+            cached = json.load(f)
+        print(f"[OCR] 캐시 사용: {cache_path} ({len(cached['timestamps'])}개)")
+        return cached["timestamps"], cached["pitch_data"]
+
+    timestamps, pitch_data = scan_pitch_overlays(video_path)
+
+    os.makedirs(OCR_CACHE_DIR, exist_ok=True)
+    tmp_path = f"{cache_path}.tmp"
+    with open(tmp_path, "w", encoding="utf-8") as f:
+        json.dump({"timestamps": timestamps, "pitch_data": pitch_data}, f, ensure_ascii=False)
+    os.replace(tmp_path, cache_path)  # 중단돼도 반쪽 캐시가 남지 않도록 원자적 교체
+    print(f"[OCR] 캐시 저장: {cache_path} ({len(timestamps)}개)")
+    return timestamps, pitch_data
+
+
 def main() -> None:
     if not GAME_LIST:
         print(
@@ -90,7 +124,6 @@ def main() -> None:
         return
 
     from pybaseball import statcast_single_game
-    from pose_detector import scan_pitch_overlays
     from yolo_detector import load_model
 
     print("[1/3] YOLO 모델 로드...")
@@ -121,7 +154,7 @@ def main() -> None:
         games=GAME_LIST,
         fetch_statcast=fetch_statcast,
         resolve_video=resolve_video,
-        scan_overlays=scan_pitch_overlays,
+        scan_overlays=scan_overlays_cached,
         extract_trajectory=extract_trajectory,
     )
 

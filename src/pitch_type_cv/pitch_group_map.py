@@ -2,7 +2,9 @@
 
 PITCH_GROUP_MAP: dict[str, str] = {
     "FF": "FASTBALL", "SI": "FASTBALL", "FC": "FASTBALL",
-    "SL": "BREAKING", "CU": "BREAKING",
+    # ST(스위퍼)는 2023년 Statcast에 신설된 코드다. 2024 WS G1 한 경기에만 25구(9%) 나와,
+    # 빠뜨리면 실제 브레이킹볼이 통째로 학습셋에서 제외된다.
+    "SL": "BREAKING", "CU": "BREAKING", "ST": "BREAKING",
     "CH": "OFFSPEED", "FS": "OFFSPEED",
 }
 
@@ -13,6 +15,9 @@ def pitch_type_to_group(pitch_type: str) -> str | None:
 
 
 OCR_PITCH_NAME_GROUP_MAP: dict[str, str] = {
+    # pose_detector.PITCH_MAP은 오버레이 텍스트 "FASTBALL"을 일반명 "Fastball"로 바꾼다.
+    # 3그룹에서는 FF/SI/FC가 모두 FASTBALL이라 구질 세부를 몰라도 그룹은 확정된다.
+    "Fastball": "FASTBALL",
     "4-Seam Fastball": "FASTBALL",
     "2-Seam Fastball": "FASTBALL",
     "Sinker": "FASTBALL",

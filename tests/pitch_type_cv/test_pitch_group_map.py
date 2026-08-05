@@ -43,4 +43,17 @@ def test_ocr_returns_none_for_none_input():
 
 def test_ocr_returns_none_for_unrecognized_name():
     assert ocr_pitch_name_to_group("Knuckleball") is None
-    assert ocr_pitch_name_to_group("Fastball") is None
+
+
+def test_ocr_maps_generic_fastball_name():
+    """
+    pose_detector.PITCH_MAP은 오버레이 텍스트 "FASTBALL"을 표시명 "Fastball"로 바꾼다.
+    3그룹 분류에서는 FF/SI/FC가 모두 FASTBALL이라 일반명도 모호하지 않다.
+    실측(2024 WS G1)에서 OCR 판독 237건 중 74건이 이 이름이었다.
+    """
+    assert ocr_pitch_name_to_group("Fastball") == "FASTBALL"
+
+
+def test_statcast_maps_sweeper_to_breaking():
+    """ST(스위퍼)는 브레이킹볼이다. 2024 WS G1 한 경기에만 25구(9%) 나온다."""
+    assert pitch_type_to_group("ST") == "BREAKING"

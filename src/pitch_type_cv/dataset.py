@@ -1,5 +1,6 @@
-"""OCR 타임스탐프와 Statcast 정답을 페어링해 학습용 데이터셋을 조립한다."""
+"""OCR이 읽은 중계 오버레이 구종을 라벨로 삼아 학습용 데이터셋을 조립한다."""
 import logging
+from collections import Counter
 from dataclasses import dataclass
 from typing import Callable
 
@@ -10,24 +11,54 @@ from pitch_type_cv.trajectory_features import compute_trajectory_features
 
 logger = logging.getLogger(__name__)
 
-MIN_COMPARABLE_PAIRS_FOR_VALIDATION = 5
-MIN_OCR_STATCAST_AGREEMENT_RATE = 0.5
+# OCR 라벨 비율이 Statcast 실제 비율과 이만큼 넘게 벌어지면 경고한다.
+# 중단시키지는 않는다 — 검증된 임계값이 아니고, 라벨 정확성이 이 값에 걸려 있지도 않다.
+GROUP_SHARE_WARN_DIVERGENCE = 0.25
 
 
-def pair_timestamps_with_statcast(
-    timestamps: list[float], pitch_types: list[str]
-) -> list[tuple[float, str]]:
+def _group_shares(groups: list[str | None]) -> dict[str, float]:
+    """None(판독 실패·미매핑)을 뺀 그룹별 비율."""
+    valid = [g for g in groups if g is not None]
+    if not valid:
+        return {}
+    counts = Counter(valid)
+    return {g: c / len(valid) for g, c in counts.items()}
+
+
+def _log_group_distribution_check(
+    game_pk: int, ocr_groups: list[str | None], statcast_groups: list[str | None]
+) -> None:
     """
-    i번째 OCR 타임스탐프를 i번째 Statcast pitch_type과 순서대로 페어링한다.
-    개수가 다르면 짧은 쪽 길이까지만 앞에서부터 매칭하고 경고를 남긴다.
+    OCR 라벨 분포를 Statcast 실제 분포와 대조해 기록한다.
+
+    투구 단위 페어링이 아니라 **분포 단위** 비교라 순서 밀림에 영향받지 않는다.
+    OCR이 특정 구종을 체계적으로 오독하는 경우(예: 패스트볼을 브레이킹볼로)를 잡는 게 목적이다.
     """
-    n = min(len(timestamps), len(pitch_types))
-    if len(timestamps) != len(pitch_types):
+    ocr_shares = _group_shares(ocr_groups)
+    statcast_shares = _group_shares(statcast_groups)
+    if not ocr_shares or not statcast_shares:
+        return
+
+    logger.info(
+        "game_pk=%s 그룹 비율 — OCR %s / Statcast %s",
+        game_pk,
+        {g: f"{s:.0%}" for g, s in sorted(ocr_shares.items())},
+        {g: f"{s:.0%}" for g, s in sorted(statcast_shares.items())},
+    )
+
+    worst_group, worst = max(
+        (
+            (g, abs(ocr_shares.get(g, 0.0) - statcast_shares.get(g, 0.0)))
+            for g in set(ocr_shares) | set(statcast_shares)
+        ),
+        key=lambda pair: pair[1],
+    )
+    if worst > GROUP_SHARE_WARN_DIVERGENCE:
         logger.warning(
-            "OCR 타임스탐프(%d개)와 Statcast 투구 수(%d개)가 달라 앞에서부터 %d개만 매칭합니다.",
-            len(timestamps), len(pitch_types), n,
+            "game_pk=%s %s 비율이 Statcast와 %.0f%%p 차이납니다. "
+            "OCR 구종 판독이 편향됐을 수 있습니다.",
+            game_pk, worst_group, worst * 100,
         )
-    return list(zip(timestamps[:n], pitch_types[:n]))
 
 
 def build_dataset_for_game(
@@ -39,39 +70,41 @@ def build_dataset_for_game(
     extract_trajectory: Callable[[str, float], list[tuple[float, float]]],
 ) -> pd.DataFrame:
     """
-    한 경기의 영상+Statcast에서 (궤적 특징, 구종 그룹) 라벨링된 데이터셋 행을 조립한다.
-    매핑 안 되는 구종(OTHER)과 궤적 포인트 부족 샘플은 제외한다.
+    한 경기의 영상에서 (궤적 특징, 구종 그룹) 라벨링된 데이터셋 행을 조립한다.
+
+    라벨은 **OCR이 읽은 중계 오버레이 구종**을 그대로 쓴다. 타임스탬프와 구종이 같은
+    오버레이에서 함께 나오므로 순서 밀림이 원천적으로 없다. 이전에는 Statcast를 정답으로
+    삼고 i번째 OCR ↔ i번째 Statcast로 붙였는데, OCR이 투구를 하나 놓칠 때마다 그 뒤가
+    전부 한 칸씩 밀려 실측 일치율이 무작위 수준(34%)까지 떨어졌다.
+
+    Statcast는 라벨이 아니라 그룹 비율 대조(진단)용으로만 쓴다.
+    구종을 못 읽었거나 매핑 안 되는 샘플, 궤적 포인트가 부족한 샘플은 제외한다.
     """
     video_path = resolve_video(youtube_url)
-    statcast_df = fetch_statcast(game_pk)
-    pitch_types = statcast_df["pitch_type"].tolist()
-
     timestamps, pitch_data = scan_overlays(video_path)
-    pairs = pair_timestamps_with_statcast(timestamps, pitch_types)
-    ocr_pitch_data = pitch_data[:len(pairs)]
 
-    n_paired = len(pairs)
-    n_excluded_unmapped = 0
+    if len(timestamps) != len(pitch_data):
+        logger.warning(
+            "game_pk=%s 타임스탐프(%d개)와 OCR 구종(%d개) 개수가 달라 짧은 쪽까지만 씁니다.",
+            game_pk, len(timestamps), len(pitch_data),
+        )
+    ocr_groups = [ocr_pitch_name_to_group(entry.get("pitch_type")) for entry in pitch_data]
+
+    statcast_df = fetch_statcast(game_pk)
+    _log_group_distribution_check(
+        game_pk,
+        ocr_groups,
+        [pitch_type_to_group(p) for p in statcast_df["pitch_type"].tolist()],
+    )
+
+    n_detected = len(timestamps)
+    n_excluded_unreadable = 0
     n_excluded_short_trajectory = 0
-    n_kept = 0
-    comparable_pairs = 0
-    agreeing_pairs = 0
 
     rows = []
-    for i, (timestamp_sec, pitch_type) in enumerate(pairs):
-        group = pitch_type_to_group(pitch_type)
-
-        # ocr_pitch_data가 pairs보다 짧아도(예: scan_overlays 구현체가 빈 리스트를 주는 경우)
-        # 안전하게 "비교 불가"로 취급한다 — 인덱스 밖이면 빈 dict를 쓴다.
-        ocr_entry = ocr_pitch_data[i] if i < len(ocr_pitch_data) else {}
-        ocr_group = ocr_pitch_name_to_group(ocr_entry.get("pitch_type"))
-        if ocr_group is not None:
-            comparable_pairs += 1
-            if ocr_group == group:
-                agreeing_pairs += 1
-
+    for timestamp_sec, group in zip(timestamps, ocr_groups):
         if group is None:
-            n_excluded_unmapped += 1
+            n_excluded_unreadable += 1
             continue
 
         trajectory = extract_trajectory(video_path, timestamp_sec)
@@ -80,7 +113,6 @@ def build_dataset_for_game(
             n_excluded_short_trajectory += 1
             continue
 
-        n_kept += 1
         rows.append({
             **features,
             "group": group,
@@ -88,28 +120,9 @@ def build_dataset_for_game(
             "timestamp_sec": timestamp_sec,
         })
 
-    if comparable_pairs >= MIN_COMPARABLE_PAIRS_FOR_VALIDATION:
-        agreement_rate = agreeing_pairs / comparable_pairs
-        logger.info(
-            "game_pk=%s OCR-Statcast 구종 그룹 일치율: %.1f%% (%d/%d 비교 가능)",
-            game_pk, agreement_rate * 100, agreeing_pairs, comparable_pairs,
-        )
-        if agreement_rate < MIN_OCR_STATCAST_AGREEMENT_RATE:
-            logger.warning(
-                "game_pk=%s OCR-Statcast 구종 그룹 일치율이 %.1f%%로 낮아 "
-                "페어링 밀림이 의심됩니다. 이 경기 데이터를 제외합니다.",
-                game_pk, agreement_rate * 100,
-            )
-            return pd.DataFrame()
-    else:
-        logger.info(
-            "game_pk=%s 비교 가능한 OCR 샘플이 %d개로 부족해 일치율 검증을 건너뜁니다.",
-            game_pk, comparable_pairs,
-        )
-
     logger.info(
-        "game_pk=%s 페어링 %d개 → 매핑제외 %d개, 궤적부족제외 %d개, 최종 %d개 보존",
-        game_pk, n_paired, n_excluded_unmapped, n_excluded_short_trajectory, n_kept,
+        "game_pk=%s 감지 %d개 → 구종판독실패 %d개, 궤적부족 %d개, 최종 %d개 보존",
+        game_pk, n_detected, n_excluded_unreadable, n_excluded_short_trajectory, len(rows),
     )
 
     return pd.DataFrame(rows)

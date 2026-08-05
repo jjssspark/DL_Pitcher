@@ -36,3 +36,6 @@ venv/
 # Claude Code (로컬 전용 — 커밋하지 않음)
 CLAUDE.md
 .claude/
+
+# 파생 산출물 (OCR 캐시, 데이터셋, 학습 모델) — 재생성 가능
+output/
