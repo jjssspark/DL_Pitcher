@@ -17,7 +17,10 @@ sys.path.insert(0, os.path.join(ROOT, "src"))
 os.environ.setdefault("OPENCV_FFMPEG_LOGLEVEL", "-8")
 
 from pitch_type_cv.dataset import GameSpec, build_dataset  # noqa: E402
-from pitch_type_cv.trajectory_features import extract_trajectory_window  # noqa: E402
+from pitch_type_cv.trajectory_features import (  # noqa: E402
+    extract_trajectory_points,
+    longest_smooth_run,
+)
 
 # 실제 파일럿 경기 목록 (game_pk, YouTube URL) — 5-10개를 채운 뒤 실행
 # 전부 공식 MLB YouTube 채널의 "FULL GAME"(하이라이트 아님) 업로드, 월드시리즈라 FOX 단독 중계 확정.
@@ -41,6 +44,12 @@ CACHE_DIR = os.path.join(ROOT, "streamlit_app", ".yolo_cache")
 OUT_DIR = os.path.join(ROOT, "output", "pitch_type_cv")
 OUT_PATH = os.path.join(OUT_DIR, "dataset.csv")
 OCR_CACHE_DIR = os.path.join(OUT_DIR, "ocr_cache")
+TRAJ_CACHE_DIR = os.path.join(OUT_DIR, "trajectory_cache")
+
+# COCO 'sports ball'은 중계 화면에서 오탐이 잦다. 첫 실행 결과 233개 샘플 중 65%가
+# 곡률비 5 초과(실제 투구는 1~1.5)로, 프레임마다 다른 물체를 잡은 랜덤워크였다.
+MIN_BALL_CONF = 0.15   # detect_ball_in_frame의 하한과 동일 — 캐시가 있어 사후 조정 가능
+MAX_JUMP_PX = 60.0     # 720p·30fps 기준. 실제 공은 프레임 사이를 순간이동하지 않는다
 
 
 def resolve_video_hq(url: str) -> str:
@@ -115,6 +124,60 @@ def scan_overlays_cached(video_path: str) -> tuple[list[float], list[dict]]:
     return timestamps, pitch_data
 
 
+def _load_trajectory_cache(cache_path: str) -> dict[str, list]:
+    """JSONL 캐시를 읽어 {타임스탬프 문자열: [[x, y, conf], ...]}로 돌려준다."""
+    if not os.path.exists(cache_path):
+        return {}
+    cached = {}
+    with open(cache_path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                entry = json.loads(line)
+            except json.JSONDecodeError:
+                continue  # 중단으로 잘린 마지막 줄 — 해당 투구만 다시 뽑으면 된다
+            cached[f"{entry['t']:.4f}"] = entry["points"]
+    return cached
+
+
+def make_trajectory_extractor(yolo_model):
+    """
+    원시 감지 결과를 JSONL로 증분 저장하면서 궤적을 뽑는 콜러블을 만든다.
+
+    투구 한 건마다 즉시 append하므로 중간에 중단돼도 진행분이 남는다 (OCR 캐시는
+    완주해야만 저장돼 2시간 진행분을 통째로 날린 적이 있다). 신뢰도·연속성 필터는
+    캐시 위에서 적용하므로, 임계값을 바꿔도 영상 재처리 없이 다시 계산할 수 있다.
+    """
+    os.makedirs(TRAJ_CACHE_DIR, exist_ok=True)
+    state: dict = {"path": None, "cached": {}}
+
+    def extract(video_path: str, timestamp_sec: float) -> list[tuple[float, float]]:
+        key = os.path.splitext(os.path.basename(video_path))[0]
+        cache_path = os.path.join(TRAJ_CACHE_DIR, f"{key}.jsonl")
+        if state["path"] != cache_path:
+            state["path"] = cache_path
+            state["cached"] = _load_trajectory_cache(cache_path)
+            if state["cached"]:
+                print(f"[궤적] 캐시 사용: {cache_path} ({len(state['cached'])}개)")
+
+        ts_key = f"{timestamp_sec:.4f}"
+        points = state["cached"].get(ts_key)
+        if points is None:
+            points = extract_trajectory_points(
+                video_path, timestamp_sec, yolo_model, target_fps=DETECT_FPS
+            )
+            with open(cache_path, "a", encoding="utf-8") as f:
+                f.write(json.dumps({"t": timestamp_sec, "points": points}) + "\n")
+            state["cached"][ts_key] = points
+
+        confident = [(x, y) for x, y, conf in points if conf >= MIN_BALL_CONF]
+        return longest_smooth_run(confident, MAX_JUMP_PX)
+
+    return extract
+
+
 def main() -> None:
     if not GAME_LIST:
         print(
@@ -144,10 +207,7 @@ def main() -> None:
     def resolve_video(url: str) -> str:
         return resolve_video_hq(url)
 
-    def extract_trajectory(video_path: str, timestamp_sec: float):
-        return extract_trajectory_window(
-            video_path, timestamp_sec, yolo_model, target_fps=DETECT_FPS
-        )
+    extract_trajectory = make_trajectory_extractor(yolo_model)
 
     print(f"[2/3] {len(GAME_LIST)}개 경기 데이터셋 조립 중...")
     dataset_df = build_dataset(

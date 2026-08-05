@@ -102,6 +102,42 @@ def test_frames_in_window_does_not_truncate_on_high_fps_video(synthetic_video_60
     assert len(frames) > 90
 
 
+def test_longest_smooth_run_keeps_all_points_when_motion_is_continuous():
+    from pitch_type_cv.trajectory_features import longest_smooth_run
+
+    smooth = [(0.0, 0.0), (10.0, 10.0), (20.0, 20.0), (30.0, 30.0)]
+    assert longest_smooth_run(smooth, max_jump_px=30.0) == smooth
+
+
+def test_longest_smooth_run_drops_shorter_side_of_a_teleport():
+    from pitch_type_cv.trajectory_features import longest_smooth_run
+
+    # 앞 2점 → 900px 점프(다른 물체 오탐) → 뒤 4점. 긴 쪽만 남아야 한다.
+    points = [
+        (0.0, 0.0), (10.0, 0.0),
+        (900.0, 500.0), (910.0, 510.0), (920.0, 520.0), (930.0, 530.0),
+    ]
+    assert longest_smooth_run(points, max_jump_px=30.0) == points[2:]
+
+
+def test_longest_smooth_run_returns_input_when_too_short_to_split():
+    from pitch_type_cv.trajectory_features import longest_smooth_run
+
+    assert longest_smooth_run([], max_jump_px=30.0) == []
+    assert longest_smooth_run([(1.0, 1.0)], max_jump_px=30.0) == [(1.0, 1.0)]
+
+
+def test_longest_smooth_run_picks_longest_not_first_run():
+    from pitch_type_cv.trajectory_features import longest_smooth_run
+
+    points = [
+        (0.0, 0.0), (5.0, 5.0), (10.0, 10.0),                 # 3점 구간
+        (800.0, 800.0),                                        # 점프
+        (0.0, 0.0), (5.0, 5.0), (10.0, 10.0), (15.0, 15.0),   # 4점 구간
+    ]
+    assert longest_smooth_run(points, max_jump_px=30.0) == points[4:]
+
+
 def test_sampling_step_rounds_ntsc_framerate_to_nearest_integer():
     from pitch_type_cv.trajectory_features import _sampling_step
 

@@ -66,6 +66,36 @@ def compute_trajectory_features(
     }
 
 
+def longest_smooth_run(
+    trajectory: list[tuple[float, float]], max_jump_px: float
+) -> list[tuple[float, float]]:
+    """
+    연속 프레임 간 이동거리가 max_jump_px 이하인 최장 구간만 남긴다.
+
+    COCO 사전학습 YOLO의 'sports ball'은 중계 화면에서 공 대신 다른 둥근 물체를
+    자주 잡는다. 그 결과 궤적이 프레임마다 화면을 가로지르는 랜덤워크가 되고,
+    곡률비가 실제 투구(1~1.5)의 수십 배로 튄다. 실제 공은 프레임 사이를 순간이동하지
+    않으므로, 공간적으로 이어지는 최장 구간이 실제 비행 구간일 가능성이 가장 높다.
+    """
+    if len(trajectory) < 2:
+        return list(trajectory)
+
+    best_start = best_end = 0      # [best_start, best_end) 반열린 구간
+    run_start = 0
+    for i in range(1, len(trajectory) + 1):
+        broken = (
+            i == len(trajectory)
+            or math.dist(trajectory[i - 1], trajectory[i]) > max_jump_px
+        )
+        if not broken:
+            continue
+        if i - run_start > best_end - best_start:
+            best_start, best_end = run_start, i
+        run_start = i
+
+    return trajectory[best_start:best_end]
+
+
 def _sampling_step(fps: float, target_fps: float | None) -> int:
     """
     target_fps에 가장 가까운 정수 프레임 간격. NTSC 계열 영상은 59.94/29.97처럼 정수
@@ -141,6 +171,37 @@ def trajectory_from_frames(
         best = max(detections, key=lambda d: d["conf"])
         trajectory.append((float(best["cx"]), float(best["cy"])))
     return trajectory
+
+
+def extract_trajectory_points(
+    video_path: str,
+    timestamp_sec: float,
+    model,
+    lookback_start_sec: float = 3.0,
+    lookback_end_sec: float = 0.3,
+    target_fps: float | None = None,
+) -> list[tuple[float, float, float]]:
+    """
+    OCR 타임스탬프 구간의 원시 공 감지 결과를 (x, y, conf)로 돌려준다.
+
+    extract_trajectory_window와 달리 신뢰도를 버리지 않는다. 이 결과를 캐시해두면
+    신뢰도·연속성 임계값을 바꿔가며 재실험할 때 영상을 다시 디코딩·추론하지 않아도
+    된다 — 경기당 실측 39분이 걸리는 작업이다.
+    """
+    from yolo_detector import detect_ball_in_frame  # 지연 import: 순수 함수는 ultralytics에 비의존
+
+    frames = frames_in_window(
+        video_path, timestamp_sec, lookback_start_sec, lookback_end_sec,
+        target_fps=target_fps,
+    )
+    points: list[tuple[float, float, float]] = []
+    for frame in frames:
+        detections = detect_ball_in_frame(model, frame)
+        if not detections:
+            continue
+        best = max(detections, key=lambda d: d["conf"])
+        points.append((float(best["cx"]), float(best["cy"]), float(best["conf"])))
+    return points
 
 
 def extract_trajectory_window(
