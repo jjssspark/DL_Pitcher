@@ -5,10 +5,13 @@ from typing import Callable
 
 import pandas as pd
 
-from pitch_type_cv.pitch_group_map import pitch_type_to_group
+from pitch_type_cv.pitch_group_map import ocr_pitch_name_to_group, pitch_type_to_group
 from pitch_type_cv.trajectory_features import compute_trajectory_features
 
 logger = logging.getLogger(__name__)
+
+MIN_COMPARABLE_PAIRS_FOR_VALIDATION = 5
+MIN_OCR_STATCAST_AGREEMENT_RATE = 0.5
 
 
 def pair_timestamps_with_statcast(
@@ -43,26 +46,71 @@ def build_dataset_for_game(
     statcast_df = fetch_statcast(game_pk)
     pitch_types = statcast_df["pitch_type"].tolist()
 
-    timestamps, _ = scan_overlays(video_path)
+    timestamps, pitch_data = scan_overlays(video_path)
     pairs = pair_timestamps_with_statcast(timestamps, pitch_types)
+    ocr_pitch_data = pitch_data[:len(pairs)]
+
+    n_paired = len(pairs)
+    n_excluded_unmapped = 0
+    n_excluded_short_trajectory = 0
+    n_kept = 0
+    comparable_pairs = 0
+    agreeing_pairs = 0
 
     rows = []
-    for timestamp_sec, pitch_type in pairs:
+    for i, (timestamp_sec, pitch_type) in enumerate(pairs):
         group = pitch_type_to_group(pitch_type)
+
+        # ocr_pitch_data가 pairs보다 짧아도(예: scan_overlays 구현체가 빈 리스트를 주는 경우)
+        # 안전하게 "비교 불가"로 취급한다 — 인덱스 밖이면 빈 dict를 쓴다.
+        ocr_entry = ocr_pitch_data[i] if i < len(ocr_pitch_data) else {}
+        ocr_group = ocr_pitch_name_to_group(ocr_entry.get("pitch_type"))
+        if ocr_group is not None:
+            comparable_pairs += 1
+            if ocr_group == group:
+                agreeing_pairs += 1
+
         if group is None:
+            n_excluded_unmapped += 1
             continue
 
         trajectory = extract_trajectory(video_path, timestamp_sec)
         features = compute_trajectory_features(trajectory)
         if features is None:
+            n_excluded_short_trajectory += 1
             continue
 
+        n_kept += 1
         rows.append({
             **features,
             "group": group,
             "game_pk": game_pk,
             "timestamp_sec": timestamp_sec,
         })
+
+    if comparable_pairs >= MIN_COMPARABLE_PAIRS_FOR_VALIDATION:
+        agreement_rate = agreeing_pairs / comparable_pairs
+        logger.info(
+            "game_pk=%s OCR-Statcast 구종 그룹 일치율: %.1f%% (%d/%d 비교 가능)",
+            game_pk, agreement_rate * 100, agreeing_pairs, comparable_pairs,
+        )
+        if agreement_rate < MIN_OCR_STATCAST_AGREEMENT_RATE:
+            logger.warning(
+                "game_pk=%s OCR-Statcast 구종 그룹 일치율이 %.1f%%로 낮아 "
+                "페어링 밀림이 의심됩니다. 이 경기 데이터를 제외합니다.",
+                game_pk, agreement_rate * 100,
+            )
+            return pd.DataFrame()
+    else:
+        logger.info(
+            "game_pk=%s 비교 가능한 OCR 샘플이 %d개로 부족해 일치율 검증을 건너뜁니다.",
+            game_pk, comparable_pairs,
+        )
+
+    logger.info(
+        "game_pk=%s 페어링 %d개 → 매핑제외 %d개, 궤적부족제외 %d개, 최종 %d개 보존",
+        game_pk, n_paired, n_excluded_unmapped, n_excluded_short_trajectory, n_kept,
+    )
 
     return pd.DataFrame(rows)
 

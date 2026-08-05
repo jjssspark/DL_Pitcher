@@ -81,6 +81,115 @@ def test_build_dataset_for_game_excludes_short_trajectories():
     assert df.iloc[0]["group"] == "FASTBALL"
 
 
+def test_build_dataset_for_game_high_ocr_agreement_returns_normal_rows(caplog):
+    statcast_df = pd.DataFrame({"pitch_type": ["FF", "FF", "SL", "SL", "CH"]})
+    trajectories = {
+        1.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],
+        2.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],
+        3.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],
+        4.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],
+        5.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],
+    }
+    pitch_data = [
+        {"pitch_type": "4-Seam Fastball", "speed": 95},
+        {"pitch_type": "4-Seam Fastball", "speed": 96},
+        {"pitch_type": "Slider", "speed": 85},
+        {"pitch_type": "Slider", "speed": 84},
+        {"pitch_type": "Changeup", "speed": 83},
+    ]
+
+    with caplog.at_level(logging.INFO):
+        df = build_dataset_for_game(
+            game_pk=775300,
+            youtube_url="https://youtu.be/fake",
+            fetch_statcast=lambda game_pk: statcast_df,
+            resolve_video=lambda url: "fake_video.mp4",
+            scan_overlays=lambda video_path: ([1.0, 2.0, 3.0, 4.0, 5.0], pitch_data),
+            extract_trajectory=lambda video_path, ts: trajectories[ts],
+        )
+
+    assert len(df) == 5
+    assert not any(r.levelno >= logging.WARNING for r in caplog.records)
+
+
+def test_build_dataset_for_game_low_ocr_agreement_returns_empty_and_warns(caplog):
+    statcast_df = pd.DataFrame({"pitch_type": ["FF", "FF", "FF", "FF", "FF"]})
+    trajectories = {ts: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)] for ts in [1.0, 2.0, 3.0, 4.0, 5.0]}
+    # Statcast는 전부 FASTBALL이지만 OCR은 대부분 BREAKING을 읽음 → 일치율 낮음(페어링 밀림 의심)
+    pitch_data = [
+        {"pitch_type": "Slider", "speed": 85},
+        {"pitch_type": "Slider", "speed": 85},
+        {"pitch_type": "Slider", "speed": 85},
+        {"pitch_type": "Slider", "speed": 85},
+        {"pitch_type": "4-Seam Fastball", "speed": 95},
+    ]
+
+    with caplog.at_level(logging.INFO):
+        df = build_dataset_for_game(
+            game_pk=775300,
+            youtube_url="https://youtu.be/fake",
+            fetch_statcast=lambda game_pk: statcast_df,
+            resolve_video=lambda url: "fake_video.mp4",
+            scan_overlays=lambda video_path: ([1.0, 2.0, 3.0, 4.0, 5.0], pitch_data),
+            extract_trajectory=lambda video_path, ts: trajectories[ts],
+        )
+
+    assert df.empty
+    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
+    assert any("775300" in r.message for r in warnings)
+
+
+def test_build_dataset_for_game_too_few_comparable_pairs_skips_validation():
+    statcast_df = pd.DataFrame({"pitch_type": ["FF", "SL", "CH"]})
+    trajectory = [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)]
+    pitch_data = [
+        {"pitch_type": None, "speed": None},
+        {"pitch_type": None, "speed": None},
+        {"pitch_type": None, "speed": None},
+    ]
+
+    df = build_dataset_for_game(
+        game_pk=775300,
+        youtube_url="https://youtu.be/fake",
+        fetch_statcast=lambda game_pk: statcast_df,
+        resolve_video=lambda url: "fake_video.mp4",
+        scan_overlays=lambda video_path: ([1.0, 2.0, 3.0], pitch_data),
+        extract_trajectory=lambda video_path, ts: trajectory,
+    )
+
+    assert len(df) == 3
+
+
+def test_build_dataset_for_game_logs_exclusion_diagnostics(caplog):
+    statcast_df = pd.DataFrame({"pitch_type": ["FF", "KN", "SL"]})  # KN은 매핑 안 됨
+    trajectories = {
+        1.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],  # 정상 보존
+        2.0: [(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)],  # 매핑 제외 대상이라 궤적 미사용
+        3.0: [(0.0, 0.0)],  # 궤적 포인트 부족으로 제외
+    }
+
+    with caplog.at_level(logging.INFO):
+        df = build_dataset_for_game(
+            game_pk=775300,
+            youtube_url="https://youtu.be/fake",
+            fetch_statcast=lambda game_pk: statcast_df,
+            resolve_video=lambda url: "fake_video.mp4",
+            scan_overlays=lambda video_path: ([1.0, 2.0, 3.0], []),
+            extract_trajectory=lambda video_path, ts: trajectories[ts],
+        )
+
+    assert len(df) == 1
+
+    summary_logs = [
+        r for r in caplog.records
+        if r.levelno >= logging.INFO and "페어링" in r.message
+    ]
+    assert len(summary_logs) == 1
+    message = summary_logs[0].message
+    assert "3" in message  # n_paired
+    assert "1" in message  # 매핑제외/궤적부족제외/최종 보존 각각 1개
+
+
 from pitch_type_cv.dataset import GameSpec, build_dataset
 
 
