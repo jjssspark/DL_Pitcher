@@ -1,6 +1,6 @@
 # 다음 세션 착수 문서 — CV 구종 분류 파일럿
 
-마지막 갱신: 2026-08-06 · 마지막 커밋: `515efb6`
+마지막 갱신: 2026-08-06 (2차 세션) · 관련 ADR: ADR-0009, ADR-0010
 
 ---
 
@@ -8,27 +8,20 @@
 
 ```
 CV 구종 분류 파일럿을 이어서 한다. docs/NEXT_SESSION.md를 먼저 읽고,
-docs/TROUBLESHOOTING.md의 TS-018(감지 임계값 무효)과 TS-019(정지 오탐 4번째 재발)를
+docs/TROUBLESHOOTING.md의 TS-020(구종 매핑 구멍)과 TS-021(지표가 다른 대상을 셈)을
 확인해라.
 
-지난 세션 결론: 감지기 문제를 해결했다. Roboflow 중계 도메인 데이터셋으로
-파인튜닝(models/ball_broadcast_v1.pt)하고, imgsz 960 + conf 0.05로 추론하며,
-longest_moving_chain으로 정지 오탐을 걸러낸다. 감지 게이트 7/8(88%) 통과.
-분류 성능은 0.612 vs 최빈값 기준선 0.510, 순열검정 p=0.017로 유의하다.
+지난 세션 결론: 데이터 수집을 중계 OCR에서 MLB StatsAPI + Baseball Savant 투구별
+클립으로 전환했다(ADR-0010). 4경기 1193투구, 궤적 확보 1030개.
+game_pk 단위 홀드아웃이 성립했고 누수를 제거해도 성능 차이가 유지됐다
+(+10.2%p -> +10.3%p, 순열검정 p < 0.001).
 
-남은 한계 3개가 전부 "1경기뿐"에서 온다:
-  (1) game_pk 홀드아웃 불가 -> 현재 수치는 누수 허용 상한
-  (2) 선택 편향 - 궤적 확보율이 FASTBALL 63% / BREAKING 72% / OFFSPEED 87%
-  (3) 홀드아웃 49개, OFFSPEED는 4개뿐
+남은 문제는 두 개다:
+  (1) OFFSPEED f1 0.14 - 표본은 4개에서 40개로 늘었는데 recall이 0.10이다
+  (2) FASTBALL 궤적 확보율 80.9%로 여전히 최하위. 다만 경기별 편차가 21%p라
+      "빠른 공이라 끊긴다"는 단일 설명으로는 안 맞는다
 
-오늘 할 일: 경기 수를 늘려 위 3개를 동시에 푼다.
-1. 데이터 수집 경로를 정한다 — OCR 방식 확장이냐, MLB StatsAPI + Baseball Savant
-   투구별 클립으로 전환이냐. 아래 "두 갈래" 절을 읽고 나에게 추천안을 말해라.
-2. 3경기 이상으로 dataset.csv 재생성
-3. game_pk 단위 홀드아웃으로 재측정. 특징 중요도와 순열검정을 반드시 함께 본다
-   — 정확도만 보면 안 된다 (TS-014)
-4. 선택 편향이 경기가 늘어도 남는지 확인
-
+오늘 할 일을 정하기 전에 아래 "다음 갈래"를 읽고 나에게 추천안을 말해라.
 플랜 먼저 세우고 확인받은 뒤 실행해라.
 ```
 
@@ -36,119 +29,144 @@ longest_moving_chain으로 정지 오탐을 걸러낸다. 감지 게이트 7/8(8
 
 ## 지금 상태
 
-| 항목 | 상태 |
-|---|---|
-| 공 감지 | **해결** — 게이트 7/8(88%), 사슬 중앙값 7프레임, 박스 21px |
-| 궤적 품질 | **해결** — 너클커브 낙차 가속, 싱커 단조 낙하 (물리적으로 타당) |
-| 분류 성능 | 0.612 vs 기준선 0.510 (+10.2%p), 5-fold CV 0.664 ± 0.077 |
-| 유의성 | 순열검정 1000회 **p = 0.017** |
-| 특징 중요도 | 최대/최소 비 **4.95** (TS-014 당시 1.23 = 평평 = 무신호) |
-| 데이터 규모 | **1경기 161샘플** ← 남은 병목 |
+| 항목 | 값 | 비고 |
+|---|---|---|
+| 데이터 | 4경기 1193투구, 궤적 1030개 | `output/pitch_type_cv/dataset_clips.csv` |
+| 홀드아웃 | 813027, 300샘플 (OFFSPEED 40) | game_pk 단위, 누수 없음 |
+| 정확도 | **0.587** vs 최빈값 기준선 0.483 (+10.3%p) | |
+| 순열검정 | **p < 0.001** (셔플 1000회 중 0회) | 셔플 평균 0.419 |
+| 특징 중요도 비 | 3.75 | TS-014 무신호 당시 1.23 |
+| 그룹별 f1 | BREAKING 0.62 / FASTBALL 0.65 / **OFFSPEED 0.14** | |
 
-## 감지 파이프라인 (확정 설정)
+### 이번 세션에서 확인된 것
+
+- **누수를 제거해도 성능 차이가 유지됐다.** 1경기 시절 +10.2%p는 투구 단위 분할이라
+  누수 허용 상한이었는데, 진짜 game_pk 홀드아웃에서 +10.3%p가 나왔다. 이전 수치가
+  부풀려진 것이 아니었다
+- **위상 정렬 효과가 특징 순위에 나타났다.** OCR 타임스탬프 시절 1위였던
+  `apparent_speed_px_per_frame`(0.301)이 4위(0.128)로 내려가고, 물리적으로 구종을 가르는
+  `horizontal_deviation_px`(0.261)가 1위가 됐다. 속도 특징이 원근 압축으로 체계적 왜곡을
+  받고 있었다는 가설과 일치한다
+
+  ```
+  horizontal_deviation_px        0.261
+  vertical_drop_px               0.190
+  duration_frames                0.153
+  apparent_speed_px_per_frame    0.128
+  curvature_ratio                0.127
+  path_length_px                 0.073
+  straight_line_px               0.070
+  ```
+
+## 수집 파이프라인 (경로 B, 확정)
 
 ```
-모델      models/ball_broadcast_v1.pt
-          Roboflow pitchtracking/baseball-detection-2 v4, yolov8n 33에폭, mAP50 0.960
-          가중치는 .gitignore의 *.pt에 걸려 리포에 없다. 재학습:
-            venv/bin/python3 src/train_yolo.py --workspace pitchtracking \
-              --project baseball-detection-2 --version 4 \
-              --data-dir data/raw/baseball-detection-2 \
-              --project-dir runs --name ball_broadcast --epochs 33
+라벨      https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live
+          liveData.plays.allPlays[].playEvents[] 에서 isPitch=True
+          -> playId + details.type.code (Statcast 코드). 판독률 100%
 
-추론      imgsz=960, conf=0.05   <- 둘 다 필수. 이유는 TS-018
+클립      https://baseballsavant.mlb.com/sporty-videos?playId={playId}
+          페이지의 .mp4 링크를 html.unescape 후 GET. Referer 불필요(문서의 403 주장은 오류)
+          1280x720, 약 59.6fps, 4~5MB, 길이 6~15초로 가변
+
+윈도우    클립 시작 기준 2.8 ~ 4.2초 고정  <- 바꾸지 말 것. 근거는 ADR-0010
+감지      models/ball_broadcast_v1.pt, imgsz=960, conf=0.05  <- OCR 경로와 동일
 궤적      longest_moving_chain(candidates, max_jump_px=60, min_total_move_px=30)
-윈도우    t-3.0s ~ t-0.3s, 30fps 샘플링
 ```
 
-**imgsz와 conf를 바꾸면 안 되는 이유**: 640은 공이 너무 작고 1280은 학습 시점(640 stretch)
-대비 과대하다. conf는 Ultralytics 기본값이 0.25인데 이 도메인의 공은 그 아래로 내려간다.
-`yolo_detector.CONF_THRESHOLD`는 무효이므로 **반드시 모델에 직접 넘겨야 한다**.
-
-## 남은 한계 — 전부 "1경기"에서 온다
-
-1. **누수 허용 상한**. `game_pk`가 하나뿐이라 경기 단위 홀드아웃이 불가능하고, 노트북이
-   투구 단위 층화 분할로 폴백한다. 같은 투수의 투구가 학습·홀드아웃 양쪽에 들어간다.
-2. **선택 편향**. 궤적 확보율이 균일하지 않다.
-
-   ```
-   FASTBALL  103 -> 65  (63.1%)
-   BREAKING  116 -> 83  (71.6%)
-   OFFSPEED   15 -> 13  (86.7%)
-   ```
-
-   빠른 공일수록 프레임 간 이동이 커서 사슬이 끊긴다. 현재 수치는 전체 투구가 아니라
-   "궤적이 잡히는 68%"를 대표한다.
-3. **표본 부족**. 홀드아웃 49개, OFFSPEED는 4개라 f1이 0.00이다.
-
-## 두 갈래 — 데이터 수집 경로
-
-### (A) 기존 OCR 방식 확장
-
-`scripts/build_pitch_group_dataset.py`의 `GAME_LIST`에 주석 처리된 6경기가 이미 들어 있다.
-주석만 풀면 된다. 전부 공식 MLB 채널 FULL GAME 업로드이고 game_pk는 실측 대조를 마쳤다.
-
-- 장점: 코드 변경 없음. 파이프라인이 이미 검증됨
-- 단점: 경기당 720p 다운로드 + OCR 전체 스캔이 오래 걸린다 (실측 2시간대). 6경기면 반나절.
-  OCR 판독률 85%가 상한이라 나머지 15%는 라벨을 못 얻는다
-
-### (B) MLB StatsAPI + Baseball Savant 투구별 클립
-
-지난 세션에 검증만 하고 적용하지 않은 경로다. **OCR·타임스탬프·윈도우 캘리브레이션이 전부 사라진다.**
-
-```python
-# 280/280 투구에 playId + 구종명. OCR 불필요.
-https://statsapi.mlb.com/api/v1.1/game/{game_pk}/feed/live
-  -> liveData.plays.allPlays[].playEvents[] 에서 isPitch=True, playId 보유
-
-# 투구 1개 = 클립 1개. 1280x720, 59.6fps, 6.8초, 5MB. 릴리스가 항상 3.4초 부근.
-https://baseballsavant.mlb.com/sporty-videos?playId={playId}
-  -> 페이지의 .mp4 링크를 html.unescape 후 GET (Referer 헤더 필수, 없으면 403)
+실행:
+```bash
+venv/bin/python3 scripts/build_pitch_group_clips_dataset.py
 ```
 
-- 장점: 라벨 100%(OCR 85% 한계 없음). 클립마다 릴리스 시점이 3.4초로 고정이라 **위상 정렬 문제도
-  해결**된다. 경기당 다운로드가 5MB × 투구수라 720p 풀경기(1.2GB)보다 가볍다
-- 단점: 다운로더를 새로 만들어야 한다. `resolve_video`/`scan_overlays` 인터페이스를 갈아끼워야 함
+**긴 작업은 하네스 백그라운드로 띄우지 말 것** (TS-016 재발). 1193투구 빌드는 약 100분이다.
+```bash
+nohup venv/bin/python3 -c "
+import os, runpy
+os.setsid()
+runpy.run_path('scripts/build_pitch_group_clips_dataset.py', run_name='__main__')
+" > output/pitch_type_cv/build_clips.log 2>&1 < /dev/null & disown
+```
 
-**추천**: (B). (A)는 반나절을 써도 OCR 85% 한계와 위상 misalignment가 그대로 남는다. (B)는
-구현에 시간이 들지만 세 문제를 한 번에 없앤다. 다만 파일럿을 빨리 닫는 게 목적이면 (A)로
-3경기만 돌려도 `game_pk` 홀드아웃은 성립한다.
+## 남은 문제 2개
 
-## 위상 정렬 문제 (미해결, (B) 택하면 자동 해결)
+### (1) OFFSPEED f1 0.14 — 표본을 늘렸는데도 낮다
 
-OCR 타임스탬프와 실제 투구 순간의 간격이 투구마다 다르다. 같은 f45 프레임인데 어떤 투구는
-투수 딜리버리 중이고 어떤 투구는 타자가 이미 스윙 중이다. 그래서 감지된 구간이 투구마다
-비행의 서로 다른 부분(초반/중반/종반)에 해당한다.
+```
+              precision    recall  f1-score   support
+    BREAKING       0.51      0.78      0.62       115
+    FASTBALL       0.77      0.57      0.65       145
+    OFFSPEED       0.24      0.10      0.14        40
+```
 
-`apparent_speed_px_per_frame`이 최상위 특징(0.301)인데, 원근 압축 때문에 릴리스 직후 구간이
-잡히면 빠르게, 플레이트 근처가 잡히면 느리게 나온다. **노이즈가 아니라 체계적 왜곡이다.**
-지금 성능이 유의하게 나온 건 이 왜곡에도 불구하고 신호가 있다는 뜻이므로, 정렬하면 더 오를
-여지가 있다.
+표본 부족(4개 -> 40개)은 해결됐는데 recall이 0.10이다. 40개 중 4개만 맞힌다.
+**표본 문제가 아니라 특징 문제일 가능성이 크다.** 체인지업·스플리터는 패스트볼과 궤적이
+비슷하고(속도만 다름), 픽셀 좌표만으로는 절대 속도를 알 수 없다.
+
+### (2) FASTBALL 확보율 80.9% — 경기별 편차가 21%p
+
+```
+group    FASTBALL  BREAKING  OFFSPEED
+775294      77.6%     88.7%     95.5%
+813024      71.4%     92.9%     88.9%
+813026      82.2%    100.0%     84.6%
+813027      92.4%     88.5%    100.0%   <- FASTBALL이 BREAKING을 넘는다
+```
+
+평균으로는 FASTBALL이 최하위지만 813027에서는 역전된다. "빠른 공이라 프레임 간 이동이
+커서 사슬이 끊긴다"는 설명이 맞다면 경기와 무관하게 일정해야 한다. 중계 카메라 위치·
+화질 같은 경기별 조건이 섞여 있다.
+
+## 다음 갈래
+
+### (A) 특징을 늘린다 — OFFSPEED를 겨냥
+
+현재 7개 특징은 전부 궤적의 기하학이고, 구종을 가르는 핵심인 **속도**가 픽셀 단위라
+원근에 오염돼 있다. 후보:
+- 릴리스 포인트 좌표 (클립 내 위치가 고정이라 이제 비교 가능해졌다)
+- 궤적 후반부/전반부의 곡률 비 (체인지업은 후반 낙차가 크다)
+- 박스 크기 변화율 (공이 카메라에 가까워지는 속도 = 실제 속도의 대리 지표)
+
+장점: 데이터 재수집이 필요 없다. `trajectory_cache`에 감지 후보 전체가 남아 있어
+박스 크기까지 재계산 가능하다. 단점: 특징 추가가 성능으로 이어진다는 보장이 없다.
+
+### (B) 경기를 더 늘린다
+
+경로 B는 임의 game_pk를 쓸 수 있어 확장이 쉽다. 경기당 약 100분.
+장점: 홀드아웃을 2경기로 늘려 결과 안정성이 오른다. 단점: **OFFSPEED recall 0.10은
+표본이 10배 늘어도 그대로일 수 있다.** (1)의 진단이 맞다면 헛수고다.
+
+### (C) 확보율 편차의 원인을 규명한다
+
+경기별로 FASTBALL 확보율이 71~92%로 흔들리는 이유를 먼저 밝힌다. 중계 카메라 앵글,
+해상도, 조명 중 무엇인지. 장점: 감지 파이프라인 개선의 방향이 나온다.
+단점: 분류 성능에 직접 기여하지 않는다.
+
+**추천: (A) -> (C) -> (B) 순.** (B)는 (1)의 원인을 모르는 상태에서 돌리면 100분 × N을
+쓰고 같은 f1을 볼 위험이 크다. (A)는 재수집 없이 캐시만으로 검증 가능해 가장 싸다.
 
 ## 재사용 가능한 것
 
-- `output/pitch_type_cv/ocr_cache/` — OCR 스캔 결과 (재스캔 2시간 절약)
-- `output/pitch_type_cv/trajectory_cache/*.jsonl` — 프레임별 감지 후보 전체.
-  사슬 임계값을 바꿔도 영상 재처리 없이 재계산 가능
-- `*.coco.bak.*` — TS-014 이전 COCO 감지기 산출물. 비교용으로만 남겨둠, 쓰면 안 됨
-- `scripts/verify_ball_detector.py` — 감지기를 바꿀 때마다 돌린다.
-  `--weights`, `--imgsz`, `--conf`, `--tag`로 조건 비교
-- 노트북의 특징 중요도 / 순열검정 / 선택 편향 셀 — 경기가 늘어도 그대로 쓴다
+- `output/pitch_type_cv/clip_trajectory_cache/*.jsonl` — 4경기 1193투구의 **프레임별 감지
+  후보 전체**. 사슬 임계값이나 특징 정의를 바꿔도 영상 재처리 없이 재계산 가능
+- `output/pitch_type_cv/clip_window_calibration.csv` — 60투구의 사슬 시작 시각 실측
+- `scripts/calibrate_clip_window.py` — 새 시즌·다른 중계사 클립을 넣을 때 윈도우 재확인용
+- `output/pitch_type_cv/ocr_cache/` — 구 OCR 경로 산출물. 경로 B로 전환했으므로 참고용
 
 ## 판정 규칙 (바꾸지 말 것)
 
 - **기준선은 최빈값이다.** 33% 랜덤 아님. 클래스 불균형 때문에 아무것도 학습하지 않아도
-  50%가 나온다
-- **정확도만 보지 않는다.** 특징 중요도가 평평하면(최대/최소 비가 1에 가까우면) 정확도와
-  무관하게 무신호다. TS-014에서 이 지표만이 유일한 단서였다
-- **게이트 통과 후에도 궤적 좌표를 눈으로 본다.** TS-019에서 7/8 통과한 사슬의 절반이
-  정지 오탐이었다. 실패는 알아서 눈에 띄지만 성공은 그렇지 않다
+  48%가 나온다
+- **정확도만 보지 않는다.** 특징 중요도 최대/최소 비가 1에 가까우면 정확도와 무관하게
+  무신호다. TS-014에서 이 지표만이 유일한 단서였다
+- **비율 지표는 분자와 분모가 각각 무엇을 세는지 확인한다.** TS-021에서 "확보율 93.3%"가
+  타구 비행까지 세고 있었다. 요약 통계에 중앙값만 찍으면 못 본다 — 분포의 꼬리를 본다
+- **게이트 통과 후에도 궤적 좌표를 눈으로 본다** (TS-019)
 
 ## 건드리면 안 되는 것
 
-- `runs/` — YOLO 자동 생성
-- `models/`, `*.pt` — 재학습 비용이 크다. 삭제 전 반드시 확인
-- `src/pose_detector.py`, `src/feature_engineering.py` — 설계 문서상 비범위
-  (기존 데모 파이프라인에 영향). 수정은 `src/pitch_type_cv/` 안에서만
-- `src/yolo_detector.py` — 원칙적으로 비범위. TS-018 때 동작 불변인 선택적 인자(`conf`)만
-  추가했다. 추가 수정이 필요하면 데모 경로 영향을 먼저 확인할 것
+- `runs/`, `models/`, `*.pt` — YOLO 자동 생성 / 재학습 비용이 크다
+- `src/pose_detector.py`, `src/feature_engineering.py`, `src/yolo_detector.py` — 기존 데모
+  파이프라인. 수정은 `src/pitch_type_cv/` 안에서만
+- `src/pitch_type_cv/dataset.py`, `scripts/build_pitch_group_dataset.py` — 구 OCR 경로.
+  경로 B와 병렬로 남겨둔 것이므로 삭제하지 않는다 (ADR-0010)

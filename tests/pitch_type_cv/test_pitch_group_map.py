@@ -57,3 +57,17 @@ def test_ocr_maps_generic_fastball_name():
 def test_statcast_maps_sweeper_to_breaking():
     """ST(스위퍼)는 브레이킹볼이다. 2024 WS G1 한 경기에만 25구(9%) 나온다."""
     assert pitch_type_to_group("ST") == "BREAKING"
+
+
+def test_statcast_maps_knuckle_curve_to_breaking():
+    """
+    KC(너클커브)는 브레이킹볼이다. OCR 맵에는 "Knuckle Curve"가 있었지만 Statcast 맵에는
+    빠져 있었다 — 라벨 소스를 StatsAPI로 바꾸면 조용히 전량 탈락한다.
+    후보 7경기 실측 93구 (2026-08-06 조사).
+    """
+    assert pitch_type_to_group("KC") == "BREAKING"
+
+
+def test_statcast_maps_forkball_to_offspeed():
+    """FO(포크볼)는 스플리터 계열이라 OFFSPEED다. 후보 7경기 실측 16구."""
+    assert pitch_type_to_group("FO") == "OFFSPEED"

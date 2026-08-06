@@ -4,8 +4,11 @@ PITCH_GROUP_MAP: dict[str, str] = {
     "FF": "FASTBALL", "SI": "FASTBALL", "FC": "FASTBALL",
     # ST(스위퍼)는 2023년 Statcast에 신설된 코드다. 2024 WS G1 한 경기에만 25구(9%) 나와,
     # 빠뜨리면 실제 브레이킹볼이 통째로 학습셋에서 제외된다.
-    "SL": "BREAKING", "CU": "BREAKING", "ST": "BREAKING",
-    "CH": "OFFSPEED", "FS": "OFFSPEED",
+    # KC(너클커브)와 FO(포크볼)는 OCR 맵에는 있었는데 여기엔 없었다. OCR 라벨을 쓸 때는
+    # 드러나지 않았지만 라벨 소스를 StatsAPI로 바꾸면 조용히 전량 탈락한다 —
+    # 후보 7경기 실측 KC 93구, FO 16구 (2026-08-06 조사).
+    "SL": "BREAKING", "CU": "BREAKING", "ST": "BREAKING", "KC": "BREAKING",
+    "CH": "OFFSPEED", "FS": "OFFSPEED", "FO": "OFFSPEED",
 }
 
 
