@@ -125,11 +125,11 @@ def longest_moving_chain(
     잘라낸다. 미트에 들어간 뒤의 정지 꼬리도 같은 처리로 없어진다 — 남겨두면 곡률이
     평평해져 구종 차이를 지운다.
     """
-    nodes = [
+    nodes = _drop_static_nodes([
         (frame_idx, x, y)
         for frame_idx, detections in candidates_by_frame
         for x, y, _conf in detections
-    ]
+    ])
     if not nodes:
         return []
 
@@ -141,8 +141,14 @@ def longest_moving_chain(
             gap = frame_i - frame_j
             if not 1 <= gap <= max_gap_frames:
                 continue
+            step = math.dist((xj, yj), (xi, yi))
             # 간격이 벌어진 만큼 허용 이동량도 비례해서 늘린다.
-            if math.dist((xj, yj), (xi, yi)) > max_jump_px * gap:
+            if step > max_jump_px * gap:
+                continue
+            # 움직이지 않는 두 감지 사이에는 간선을 만들지 않는다. 이 조건이 없으면
+            # 정지 오탐끼리 긴 사슬을 만들고, gap 관용을 타고 진짜 공에 이어붙어
+            # 사슬 한가운데 정지 구간이 박힌다(TS-019, 실측 투구 #53).
+            if step < min_step_px:
                 continue
             if best_len[j] + 1 > best_len[i]:
                 best_len[i] = best_len[j] + 1
@@ -158,7 +164,7 @@ def longest_moving_chain(
             cursor = prev[cursor]
         chain_idx.reverse()
 
-        points = _trim_static_ends([(nodes[k][1], nodes[k][2]) for k in chain_idx], min_step_px)
+        points = _trim_chain_ends([nodes[k] for k in chain_idx], min_step_px)
         if len(points) < 2 or math.dist(points[0], points[-1]) < min_total_move_px:
             continue
         if len(points) > len(best_chain):
@@ -167,27 +173,107 @@ def longest_moving_chain(
     return best_chain
 
 
-def _trim_static_ends(
-    points: list[tuple[float, float]], min_step_px: float
+def _trim_chain_ends(
+    nodes: list[tuple[int, float, float]], min_step_px: float, outlier_ratio: float = 3.0
 ) -> list[tuple[float, float]]:
+    """
+    사슬 양끝에서 (1) 정지 구간과 (2) 속도 이상치를 잘라낸다.
+
+    간선 조건으로 정지 물체끼리는 이어지지 않게 됐지만, 정지 감지 **하나**가 큰 점프로
+    사슬 끝에 붙는 건 여전히 가능하다(TS-019). 그 점프는 이동량이 커서 정지 트림에
+    걸리지 않는다. 대신 주변 대비 명백한 속도 이상치라는 점으로 판별한다 — 실측에서
+    프레임당 55px 점프가 10px대 구간 옆에 붙어 있었다.
+
+    비교는 반드시 **프레임당 속도**로 한다. 원 이동거리로 비교하면 감지가 한 프레임
+    빠진 구간(gap 2)의 스텝이 2배로 나와, 정상적으로 가속하는 공의 끝부분이 이상치로
+    잘려나간다.
+    """
+    trimmed = _trim_static_ends(nodes, min_step_px)
+
+    for _ in range(2):   # 양끝에 최대 1개씩만 붙을 수 있으므로 두 번이면 충분
+        if len(trimmed) < 3:   # 스텝이 2개는 있어야 이상치를 판별할 수 있다
+            break
+        speeds = _per_frame_speeds(trimmed)
+        if speeds[0] > outlier_ratio * _median(speeds[1:]):
+            trimmed = trimmed[1:]
+            continue
+        if speeds[-1] > outlier_ratio * _median(speeds[:-1]):
+            trimmed = trimmed[:-1]
+            continue
+        break
+
+    return [(x, y) for _frame, x, y in trimmed]
+
+
+def _drop_static_nodes(
+    nodes: list[tuple[int, float, float]],
+    radius_px: float = 3.0,
+    min_repeats: int = 3,
+) -> list[tuple[int, float, float]]:
+    """
+    여러 프레임에서 사실상 같은 좌표에 나타나는 감지를 버린다.
+
+    이게 정지 오탐의 정의다. 사슬을 만든 **뒤에** 걸러내려는 시도는 네 번 실패했다 —
+    정지 구간이 사슬의 앞, 중간, 뒤, 전체 어디에든 붙을 수 있고 그때마다 다른 처방이
+    필요했기 때문이다(TS-013 / TS-014 / TS-017 / TS-019). 사슬을 만들기 전에 후보에서
+    빼면 네 경우가 한 번에 사라진다.
+
+    90mph 공은 30fps에서 포구 직전까지도 프레임당 3px 이상 움직인다. 3픽셀 반경 안에
+    서로 다른 프레임의 감지가 3개 이상 모여 있으면 공이 아니다.
+    """
+    kept = []
+    for frame_idx, x, y in nodes:
+        overlaps = sum(
+            1 for other_frame, ox, oy in nodes
+            if other_frame != frame_idx and math.dist((x, y), (ox, oy)) <= radius_px
+        )
+        if overlaps + 1 < min_repeats:
+            kept.append((frame_idx, x, y))
+    return kept
+
+
+def _per_frame_speeds(nodes: list[tuple[int, float, float]]) -> list[float]:
+    """이웃한 노드 사이의 프레임당 이동량."""
+    speeds = []
+    for (f0, x0, y0), (f1, x1, y1) in zip(nodes, nodes[1:]):
+        speeds.append(math.dist((x0, y0), (x1, y1)) / max(1, f1 - f0))
+    return speeds
+
+
+def _median(values: list[float]) -> float:
+    ordered = sorted(values)
+    mid = len(ordered) // 2
+    if len(ordered) % 2:
+        return ordered[mid]
+    return (ordered[mid - 1] + ordered[mid]) / 2
+
+
+def _trim_static_ends(
+    nodes: list[tuple[int, float, float]], min_step_px: float
+) -> list[tuple[int, float, float]]:
     """
     앞뒤에서 프레임당 이동이 min_step_px 미만인 구간을 잘라낸다.
 
     정지 구간의 **마지막 점도 함께 버린다.** 그 점은 정지 물체의 좌표이고, 거기서
     다음 점으로의 "큰 이동"은 공의 운동이 아니라 다른 물체로 건너뛴 것이기 때문이다.
     """
-    start, end = 0, len(points) - 1
-    while start < end and math.dist(points[start], points[start + 1]) < min_step_px:
+    if len(nodes) < 2:
+        return list(nodes)
+
+    speeds = _per_frame_speeds(nodes)
+    start, end = 0, len(nodes) - 1
+
+    while start < end and speeds[start] < min_step_px:
         start += 1
     if start > 0:
         start += 1
 
-    while end > start and math.dist(points[end - 1], points[end]) < min_step_px:
+    while end > start and speeds[end - 1] < min_step_px:
         end -= 1
-    if end < len(points) - 1:
+    if end < len(nodes) - 1:
         end -= 1
 
-    return points[start:end + 1] if start <= end else []
+    return nodes[start:end + 1] if start <= end else []
 
 
 def extract_trajectory_candidates(
@@ -198,6 +284,7 @@ def extract_trajectory_candidates(
     lookback_end_sec: float = 0.3,
     target_fps: float | None = None,
     imgsz: int = 640,
+    conf: float | None = None,
 ) -> list[tuple[int, list[tuple[float, float, float]]]]:
     """
     윈도우 안 프레임별로 **모든** 감지 후보를 (frame_idx, [(x, y, conf), ...])로 돌려준다.
@@ -214,7 +301,7 @@ def extract_trajectory_candidates(
     )
     result = []
     for frame_idx, frame in enumerate(frames):
-        detections = detect_ball_in_frame(model, frame, imgsz=imgsz)
+        detections = detect_ball_in_frame(model, frame, imgsz=imgsz, conf=conf)
         if not detections:
             continue
         result.append((

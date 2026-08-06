@@ -68,7 +68,9 @@ def sample_pitches(n: int, seed: int) -> list[tuple[int, float, str]]:
     return [entries[i] for i in sorted(idx)]
 
 
-def detect_window(model, timestamp_sec: float, imgsz: int) -> tuple[list[dict], int]:
+def detect_window(
+    model, timestamp_sec: float, imgsz: int, conf: float | None = None
+) -> tuple[list[dict], int]:
     """
     윈도우 안의 프레임마다 **모든** 감지 후보를 모은다.
     돌려주는 값: (프레임별 감지 목록, 검사한 프레임 수)
@@ -84,7 +86,7 @@ def detect_window(model, timestamp_sec: float, imgsz: int) -> tuple[list[dict], 
     )
     found = []
     for frame_idx, frame in enumerate(frames):
-        detections = detect_ball_in_frame(model, frame, imgsz=imgsz)
+        detections = detect_ball_in_frame(model, frame, imgsz=imgsz, conf=conf)
         if not detections:
             continue
         found.append({
@@ -198,6 +200,10 @@ def main() -> int:
     parser.add_argument("--imgsz", type=int, default=640)
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--tag", default="", help="출력 하위 폴더 접미사 (조건 비교용)")
+    parser.add_argument(
+        "--conf", type=float, default=None,
+        help="모델에 직접 넘기는 신뢰도 하한. 생략 시 Ultralytics 기본 0.25 (TS-018)",
+    )
     args = parser.parse_args()
 
     import torch
@@ -216,7 +222,7 @@ def main() -> int:
     lines = []
 
     for idx, timestamp, label in sample_pitches(args.pitches, args.seed):
-        found, n_frames = detect_window(model, timestamp, args.imgsz)
+        found, n_frames = detect_window(model, timestamp, args.imgsz, args.conf)
         chain = chain_for_window(found)
         members = chain_members(found, chain)
         chain_lengths.append(len(chain))

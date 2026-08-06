@@ -115,14 +115,24 @@ def load_model(model_path: str = None) -> YOLO:
     return YOLO("yolov8n.pt")
 
 
-def detect_ball_in_frame(model: YOLO, frame: np.ndarray, imgsz: int = 640) -> list[dict]:
+def detect_ball_in_frame(
+    model: YOLO, frame: np.ndarray, imgsz: int = 640, conf: float | None = None
+) -> list[dict]:
     """
     단일 프레임에서 야구공 감지
+
+    conf를 주지 않으면 Ultralytics 기본 임계값(0.25)이 적용된다. 위의 CONF_THRESHOLD는
+    그보다 낮아 **실질적으로 무효였다** — 모델이 0.25에서 이미 걸러낸 결과를 다시 거르고
+    있었기 때문이다(TS-018). 중계 화면의 소형 공은 신뢰도가 0.25 아래로 내려가는 일이
+    잦아, 실제로 낮추려면 이 인자로 모델에 직접 넘겨야 한다.
+
+    기본값 None은 기존 데모 경로의 동작을 그대로 보존한다.
 
     Returns:
         [{"bbox": [x1,y1,x2,y2], "conf": float, "cx": int, "cy": int}, ...]
     """
-    results = model(frame, verbose=False, imgsz=imgsz)[0]
+    kwargs = {} if conf is None else {"conf": conf}
+    results = model(frame, verbose=False, imgsz=imgsz, **kwargs)[0]
     detections = []
 
     for box in results.boxes:
