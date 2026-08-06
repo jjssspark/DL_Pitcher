@@ -138,6 +138,96 @@ def test_longest_smooth_run_picks_longest_not_first_run():
     assert longest_smooth_run(points, max_jump_px=30.0) == points[4:]
 
 
+def test_longest_moving_chain_rejects_static_false_positive():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    # 실측 재현(TS-017): 정지 오탐이 30프레임 연속 + 높은 신뢰도로 잡히고,
+    # 실제 공은 8프레임만 잡힌다. 길이로 골라도 신뢰도로 골라도 오탐이 이긴다.
+    candidates = []
+    for f in range(30):
+        row = [(601.0, 181.0, 0.71)]                  # 화면 고정 오탐
+        if 10 <= f < 18:
+            row.append((700.0 - (f - 10) * 6, 260.0 + (f - 10) * 5, 0.45))  # 날아가는 공
+        candidates.append((f, row))
+
+    chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+
+    assert len(chain) == 8
+    assert chain[0] == (700.0, 260.0)
+    assert chain[-1] == (658.0, 295.0)
+
+
+def test_longest_moving_chain_returns_empty_when_everything_is_static():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    candidates = [(f, [(601.0, 181.0, 0.9)]) for f in range(20)]
+    assert longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0) == []
+
+
+def test_longest_moving_chain_bridges_single_frame_dropout():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    # 감지가 한 프레임 빠져도 궤적은 끊기지 않아야 한다 (실측에서 흔함).
+    candidates = [
+        (0, [(700.0, 260.0, 0.5)]),
+        (1, [(690.0, 270.0, 0.5)]),
+        (3, [(670.0, 290.0, 0.5)]),   # 프레임 2 누락
+        (4, [(660.0, 300.0, 0.5)]),
+    ]
+    chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+    assert len(chain) == 4
+
+
+def test_longest_moving_chain_trims_static_head_glued_by_gap_bridging():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    # 실측 재현(TS-017, 투구 #135): 정지 오탐 3프레임 뒤 gap 2를 건너뛴 110px 점프로
+    # 진짜 공이 이어붙는다. 전체 변위가 크므로 운동성 조건만으로는 걸러지지 않는다.
+    candidates = [
+        (41, [(405.0, 453.0, 0.25)]),
+        (42, [(405.0, 453.0, 0.38)]),
+        (43, [(404.0, 453.0, 0.40)]),
+        (45, [(432.0, 345.0, 0.55)]),
+        (46, [(456.0, 331.0, 0.54)]),
+        (47, [(479.0, 320.0, 0.34)]),
+    ]
+    chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+
+    assert chain == [(432.0, 345.0), (456.0, 331.0), (479.0, 320.0)]
+
+
+def test_longest_moving_chain_trims_static_tail():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    # 포수 미트에 들어간 뒤의 정지 프레임이 꼬리에 붙으면 곡률이 평평해진다.
+    candidates = [
+        (0, [(700.0, 300.0, 0.6)]),
+        (1, [(690.0, 285.0, 0.6)]),
+        (2, [(682.0, 272.0, 0.6)]),
+        (3, [(680.0, 271.0, 0.6)]),   # 이후 정지
+        (4, [(680.0, 271.0, 0.6)]),
+        (5, [(680.0, 271.0, 0.6)]),
+    ]
+    chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+
+    assert chain == [(700.0, 300.0), (690.0, 285.0), (682.0, 272.0)]
+
+
+def test_longest_moving_chain_prefers_moving_chain_over_longer_static_one():
+    from pitch_type_cv.trajectory_features import longest_moving_chain
+
+    candidates = []
+    for f in range(12):
+        row = [(100.0, 100.0, 0.9)]                                  # 12프레임 정지
+        if f < 5:
+            row.append((500.0 + f * 20, 300.0 + f * 15, 0.3))        # 5프레임 이동
+        candidates.append((f, row))
+
+    chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+    assert len(chain) == 5
+    assert chain[0] == (500.0, 300.0)
+
+
 def test_sampling_step_rounds_ntsc_framerate_to_nearest_integer():
     from pitch_type_cv.trajectory_features import _sampling_step
 

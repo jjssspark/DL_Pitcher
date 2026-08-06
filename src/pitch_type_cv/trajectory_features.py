@@ -96,6 +96,134 @@ def longest_smooth_run(
     return trajectory[best_start:best_end]
 
 
+def longest_moving_chain(
+    candidates_by_frame: list[tuple[int, list[tuple[float, float, float]]]],
+    max_jump_px: float,
+    min_total_move_px: float,
+    max_gap_frames: int = 2,
+    min_step_px: float = 3.0,
+) -> list[tuple[float, float]]:
+    """
+    프레임별 감지 후보들 중 **실제로 이동하는** 최장 사슬을 고른다.
+
+    `longest_smooth_run`으로는 부족하다는 것이 실측으로 드러났다(TS-017). 파인튜닝한
+    감지기는 화면의 고정된 지점을 30프레임 넘게, 실제 공보다 높은 신뢰도(0.71 vs 0.45)로
+    잡는다. 정지 물체는 "연속 프레임 간 이동이 작다"는 조건을 완벽하게 만족하므로
+    최장 매끄러운 구간 규칙에서 항상 이긴다. TS-013에서 글러브가 이긴 것과 같은 구조다.
+
+    그래서 두 조건을 함께 건다.
+      - 연속성: 프레임 간 이동이 max_jump_px 이하 (순간이동 = 다른 물체)
+      - 운동성: 사슬 전체의 시작-끝 변위가 min_total_move_px 이상 (정지 = 공이 아님)
+
+    프레임 단위 최고 신뢰도를 쓰지 않고 후보 전체를 받는 이유는, 정지 오탐과 공이
+    같은 프레임에 동시에 잡힐 때 신뢰도로 고르면 오탐이 선택되기 때문이다.
+
+    max_gap_frames는 감지가 한두 프레임 빠져도 궤적을 잇는다 — 실측에서 흔하다.
+    다만 그 관용 때문에 정지 오탐이 큰 점프로 공에 이어붙는 일이 생기고(실측 투구 #135:
+    정지 3프레임 → 110px 점프 → 공 3프레임), 전체 변위가 크므로 운동성 조건도 통과해
+    버린다. 그래서 사슬을 고른 뒤 앞뒤의 정지 구간(프레임당 이동 min_step_px 미만)을
+    잘라낸다. 미트에 들어간 뒤의 정지 꼬리도 같은 처리로 없어진다 — 남겨두면 곡률이
+    평평해져 구종 차이를 지운다.
+    """
+    nodes = [
+        (frame_idx, x, y)
+        for frame_idx, detections in candidates_by_frame
+        for x, y, _conf in detections
+    ]
+    if not nodes:
+        return []
+
+    # 프레임 순 DP: best_len[i] = i에서 끝나는 최장 사슬 길이, prev[i] = 직전 노드
+    best_len = [1] * len(nodes)
+    prev = [-1] * len(nodes)
+    for i, (frame_i, xi, yi) in enumerate(nodes):
+        for j, (frame_j, xj, yj) in enumerate(nodes[:i]):
+            gap = frame_i - frame_j
+            if not 1 <= gap <= max_gap_frames:
+                continue
+            # 간격이 벌어진 만큼 허용 이동량도 비례해서 늘린다.
+            if math.dist((xj, yj), (xi, yi)) > max_jump_px * gap:
+                continue
+            if best_len[j] + 1 > best_len[i]:
+                best_len[i] = best_len[j] + 1
+                prev[i] = j
+
+    # 운동성 조건을 만족하는 사슬 중 가장 긴 것. 정지 사슬은 아무리 길어도 탈락한다.
+    best_chain: list[tuple[float, float]] = []
+    for end in range(len(nodes)):
+        chain_idx = []
+        cursor = end
+        while cursor != -1:
+            chain_idx.append(cursor)
+            cursor = prev[cursor]
+        chain_idx.reverse()
+
+        points = _trim_static_ends([(nodes[k][1], nodes[k][2]) for k in chain_idx], min_step_px)
+        if len(points) < 2 or math.dist(points[0], points[-1]) < min_total_move_px:
+            continue
+        if len(points) > len(best_chain):
+            best_chain = points
+
+    return best_chain
+
+
+def _trim_static_ends(
+    points: list[tuple[float, float]], min_step_px: float
+) -> list[tuple[float, float]]:
+    """
+    앞뒤에서 프레임당 이동이 min_step_px 미만인 구간을 잘라낸다.
+
+    정지 구간의 **마지막 점도 함께 버린다.** 그 점은 정지 물체의 좌표이고, 거기서
+    다음 점으로의 "큰 이동"은 공의 운동이 아니라 다른 물체로 건너뛴 것이기 때문이다.
+    """
+    start, end = 0, len(points) - 1
+    while start < end and math.dist(points[start], points[start + 1]) < min_step_px:
+        start += 1
+    if start > 0:
+        start += 1
+
+    while end > start and math.dist(points[end - 1], points[end]) < min_step_px:
+        end -= 1
+    if end < len(points) - 1:
+        end -= 1
+
+    return points[start:end + 1] if start <= end else []
+
+
+def extract_trajectory_candidates(
+    video_path: str,
+    timestamp_sec: float,
+    model,
+    lookback_start_sec: float = 3.0,
+    lookback_end_sec: float = 0.3,
+    target_fps: float | None = None,
+    imgsz: int = 640,
+) -> list[tuple[int, list[tuple[float, float, float]]]]:
+    """
+    윈도우 안 프레임별로 **모든** 감지 후보를 (frame_idx, [(x, y, conf), ...])로 돌려준다.
+
+    `extract_trajectory_points`는 프레임마다 최고 신뢰도 1건만 남기는데, 정지 오탐이
+    실제 공보다 신뢰도가 높은 경우가 있어 그 시점에 공이 통째로 버려진다(TS-017).
+    후보를 전부 남겨야 longest_moving_chain이 운동성으로 고를 수 있다.
+    """
+    from yolo_detector import detect_ball_in_frame  # 지연 import: 순수 함수는 ultralytics에 비의존
+
+    frames = frames_in_window(
+        video_path, timestamp_sec, lookback_start_sec, lookback_end_sec,
+        target_fps=target_fps,
+    )
+    result = []
+    for frame_idx, frame in enumerate(frames):
+        detections = detect_ball_in_frame(model, frame, imgsz=imgsz)
+        if not detections:
+            continue
+        result.append((
+            frame_idx,
+            [(float(d["cx"]), float(d["cy"]), float(d["conf"])) for d in detections],
+        ))
+    return result
+
+
 def _sampling_step(fps: float, target_fps: float | None) -> int:
     """
     target_fps에 가장 가까운 정수 프레임 간격. NTSC 계열 영상은 59.94/29.97처럼 정수

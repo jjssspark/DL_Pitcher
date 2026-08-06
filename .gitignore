@@ -2,6 +2,11 @@
 data/raw/*.csv
 # Roboflow에서 재다운로드 가능 (src/train_yolo.py), 이미지 1000+개라 리포에서 제외
 data/yolo/
+# pitchtracking/baseball-detection-2 v4 (537MB / 8311파일). 재취득:
+#   venv/bin/python3 src/train_yolo.py --workspace pitchtracking \
+#     --project baseball-detection-2 --version 4 \
+#     --data-dir data/raw/baseball-detection-2 --download-only
+data/raw/baseball-detection-2/
 *.mp4
 
 # ── 사전학습/실험용 체크포인트 & 학습 실행 산출물 (재다운로드·재학습 가능) ──
