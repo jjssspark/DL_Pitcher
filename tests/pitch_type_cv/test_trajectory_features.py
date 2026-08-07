@@ -48,6 +48,96 @@ def test_feature_columns_match_returned_dict_keys():
     assert set(FEATURE_COLUMNS) == set(features.keys())
 
 
+# --- 시간 계열 특징: 사슬이 버렸던 frame_idx를 되살려야 계산된다 ---
+
+def test_frame_span_counts_elapsed_frames_not_detected_points():
+    """
+    duration_frames는 '감지된 점의 개수'라 감지가 빠진 프레임을 세지 못한다.
+    느린 공일수록 같은 구간을 지나는 데 프레임이 더 걸리므로 실제 경과 프레임이
+    필요하다 — 픽셀 좌표에서 얻을 수 있는 몇 안 되는 속도 대리 지표다.
+    """
+    trajectory = [(0.0, 0.0), (4.0, 4.0), (8.0, 8.0)]
+    features = compute_trajectory_features(trajectory, frame_indices=[10, 15, 20])
+
+    assert features["duration_frames"] == 3     # 기존 정의는 그대로 둔다
+    assert features["frame_span"] == 10
+    assert features["end_frame"] == 20
+
+
+def test_frame_features_fall_back_to_consecutive_frames_when_indices_absent():
+    """frame_indices 없이 호출하던 기존 코드가 그대로 동작해야 한다."""
+    trajectory = [(0.0, 0.0), (4.0, 4.0), (8.0, 8.0)]
+    features = compute_trajectory_features(trajectory)
+
+    assert features["frame_span"] == 2
+    assert features["end_frame"] == 2
+
+
+def test_speed_ratio_is_one_for_constant_speed_and_above_one_when_accelerating():
+    constant = compute_trajectory_features(
+        [(0.0, 0.0), (10.0, 0.0), (20.0, 0.0), (30.0, 0.0)]
+    )
+    accelerating = compute_trajectory_features(
+        [(0.0, 0.0), (2.0, 0.0), (8.0, 0.0), (24.0, 0.0)]
+    )
+
+    assert constant["speed_ratio_late_early"] == pytest.approx(1.0, abs=1e-6)
+    assert accelerating["speed_ratio_late_early"] > 2.0
+
+
+def test_speed_ratio_uses_frame_gaps_not_point_order():
+    """감지가 빠진 구간의 스텝은 프레임 수로 나눠야 속도가 부풀지 않는다."""
+    trajectory = [(0.0, 0.0), (10.0, 0.0), (30.0, 0.0)]
+    # 두 번째 스텝은 20px이지만 2프레임 걸렸으므로 프레임당 10px — 등속이다.
+    features = compute_trajectory_features(trajectory, frame_indices=[0, 1, 3])
+
+    assert features["speed_ratio_late_early"] == pytest.approx(1.0, abs=1e-6)
+
+
+# --- 기하 계열 특징 ---
+
+def test_release_point_is_first_trajectory_point():
+    """클립이 투구 1개라 릴리스가 화면 내 거의 고정 위치에 온다 — 이제 비교 가능하다."""
+    features = compute_trajectory_features([(640.0, 300.0), (650.0, 320.0), (660.0, 350.0)])
+
+    assert features["release_x"] == pytest.approx(640.0)
+    assert features["release_y"] == pytest.approx(300.0)
+
+
+def test_late_drop_ratio_is_larger_when_drop_is_back_loaded():
+    """체인지업·스플리터는 낙차가 후반에 몰린다. 전체 낙차가 같아도 분포가 다르다."""
+    linear = compute_trajectory_features([(0.0, 0.0), (1.0, 20.0), (2.0, 40.0), (3.0, 60.0)])
+    back_loaded = compute_trajectory_features([(0.0, 0.0), (1.0, 5.0), (2.0, 15.0), (3.0, 60.0)])
+
+    assert back_loaded["late_drop_ratio"] > linear["late_drop_ratio"]
+
+
+def test_vertical_accel_matches_quadratic_coefficient():
+    """y = t^2 이면 d²y/dt² = 2.0이다."""
+    trajectory = [(0.0, float(t * t)) for t in range(5)]
+    features = compute_trajectory_features(trajectory, frame_indices=list(range(5)))
+
+    assert features["vertical_accel_px"] == pytest.approx(2.0, abs=1e-6)
+
+
+def test_vertical_accel_is_zero_for_straight_descent():
+    trajectory = [(0.0, float(t * 10)) for t in range(5)]
+    features = compute_trajectory_features(trajectory)
+
+    assert features["vertical_accel_px"] == pytest.approx(0.0, abs=1e-6)
+
+
+def test_new_features_are_finite_on_degenerate_trajectory():
+    """
+    낙차 0 · 이동 0 같은 퇴화 궤적에서 0으로 나누면 NaN/inf가 특징에 섞이고,
+    그 행은 has_trajectory=True인 채로 학습에 들어간다.
+    """
+    features = compute_trajectory_features([(5.0, 5.0), (5.0, 5.0), (5.0, 5.0)])
+
+    for column in FEATURE_COLUMNS:
+        assert math.isfinite(features[column]), column
+
+
 import cv2
 import numpy as np
 
@@ -261,6 +351,69 @@ def test_longest_moving_chain_prefers_moving_chain_over_longer_static_one():
     chain = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
     assert len(chain) == 5
     assert chain[0] == (500.0, 300.0)
+
+
+def test_longest_moving_chain_frames_keeps_frame_indices():
+    """
+    사슬이 frame_idx를 버리면 '몇 프레임에 걸쳐 날아갔는가'를 알 수 없다.
+    감지가 빠진 프레임이 있으면 점의 개수와 경과 프레임이 갈라진다.
+    """
+    from pitch_type_cv.trajectory_features import longest_moving_chain_frames
+
+    candidates = [
+        (40, [(700.0, 260.0, 0.5)]),
+        (41, [(690.0, 270.0, 0.5)]),
+        (43, [(670.0, 290.0, 0.5)]),   # 프레임 42 누락
+        (44, [(660.0, 300.0, 0.5)]),
+    ]
+    chain = longest_moving_chain_frames(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+
+    assert [f for f, _x, _y in chain] == [40, 41, 43, 44]
+    assert chain[-1][0] - chain[0][0] == 4     # 경과 프레임
+    assert len(chain) == 4                     # 감지된 점
+
+
+def test_longest_moving_chain_accepts_detections_carrying_box_size():
+    """
+    캐시에 박스 크기를 추가하면 후보 튜플이 (x, y, conf)에서 (x, y, conf, w, h)로
+    길어진다. 사슬은 좌표만 쓰므로 구·신 스키마를 둘 다 받아야 한다 — 안 그러면
+    기존 캐시 4경기가 통째로 못 읽히고 재수집이 두 번 된다.
+    """
+    from pitch_type_cv.trajectory_features import longest_moving_chain_frames
+
+    old_schema = [
+        (0, [(700.0, 260.0, 0.5)]),
+        (1, [(690.0, 270.0, 0.5)]),
+        (2, [(680.0, 280.0, 0.5)]),
+        (3, [(670.0, 290.0, 0.5)]),
+    ]
+    new_schema = [
+        (f, [(x, y, c, 12.0, 12.0)]) for f, [(x, y, c)] in old_schema
+    ]
+
+    kwargs = dict(max_jump_px=60.0, min_total_move_px=30.0)
+    assert longest_moving_chain_frames(new_schema, **kwargs) == \
+        longest_moving_chain_frames(old_schema, **kwargs)
+
+
+def test_longest_moving_chain_matches_framed_version_coordinates():
+    """기존 호출부가 쓰는 좌표 전용 결과가 프레임 포함 결과와 어긋나면 안 된다."""
+    from pitch_type_cv.trajectory_features import (
+        longest_moving_chain,
+        longest_moving_chain_frames,
+    )
+
+    candidates = []
+    for f in range(30):
+        row = [(601.0, 181.0, 0.71)]
+        if 10 <= f < 18:
+            row.append((700.0 - (f - 10) * 6, 260.0 + (f - 10) * 5, 0.45))
+        candidates.append((f, row))
+
+    coords = longest_moving_chain(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+    framed = longest_moving_chain_frames(candidates, max_jump_px=60.0, min_total_move_px=30.0)
+
+    assert coords == [(x, y) for _f, x, y in framed]
 
 
 def test_sampling_step_rounds_ntsc_framerate_to_nearest_integer():

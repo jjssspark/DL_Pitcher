@@ -24,10 +24,13 @@ _EMPTY_FEATURES = {column: float("nan") for column in FEATURE_COLUMNS}
 
 def build_clip_dataset(
     clips: list[PitchClip],
-    extract_trajectory: Callable[[PitchClip], list[tuple[float, float]]],
+    extract_trajectory: Callable[[PitchClip], list[tuple[int, float, float]]],
 ) -> pd.DataFrame:
     """
     투구 목록에서 (궤적 특징, 구종 그룹) 데이터셋을 조립한다.
+
+    extract_trajectory는 (frame_idx, x, y)를 돌려준다. 좌표만 받으면 '감지된 점의
+    개수'와 '경과 프레임'이 구분되지 않아 시간 계열 특징이 조용히 퇴화한다.
 
     3그룹에 매핑되지 않는 구종(KN 등)만 제외한다. 궤적 추출이 실패하거나 포인트가
     부족한 투구는 특징을 NaN으로 두고 has_trajectory=False로 남긴다.
@@ -39,13 +42,16 @@ def build_clip_dataset(
             continue
 
         try:
-            trajectory = extract_trajectory(clip)
+            framed = extract_trajectory(clip)
         except Exception as exc:
             # 개별 클립의 다운로드·디코딩 실패로 경기 전체를 잃지 않는다.
             logger.warning("투구 %s 궤적 추출 실패: %s", clip.play_id, exc)
-            trajectory = []
+            framed = []
 
-        features = compute_trajectory_features(trajectory)
+        features = compute_trajectory_features(
+            [(x, y) for _frame, x, y in framed],
+            frame_indices=[frame for frame, _x, _y in framed],
+        )
         rows.append({
             **(features if features is not None else _EMPTY_FEATURES),
             "group": group,

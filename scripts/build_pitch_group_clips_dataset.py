@@ -36,7 +36,7 @@ from pitch_type_cv.savant_clips import (  # noqa: E402
 )
 from pitch_type_cv.trajectory_features import (  # noqa: E402
     extract_trajectory_candidates,
-    longest_moving_chain,
+    longest_moving_chain_frames,
 )
 
 # 4경기. OFFSPEED 비율로 골랐다 — 기존 홀드아웃에서 OFFSPEED가 4개뿐이라 f1이 0.00이었다.
@@ -51,7 +51,11 @@ GAME_LIST: list[int] = [
 CLIP_DIR = os.path.join(ROOT, "data", "raw", "savant_clips")
 OUT_DIR = os.path.join(ROOT, "output", "pitch_type_cv")
 OUT_PATH = os.path.join(OUT_DIR, "dataset_clips.csv")
-TRAJ_CACHE_DIR = os.path.join(OUT_DIR, "clip_trajectory_cache")
+# v2 = 감지 후보에 박스 크기(w, h)가 붙은 캐시. v1은 (x, y, conf)만 담아 공이 카메라에
+# 가까워지는 속도를 못 잰다 — 좌표만으로는 OFFSPEED가 안 갈린다는 게 실측으로 확인됐다.
+# 별도 디렉터리로 분리해야 v1 히트로 재수집이 통째로 건너뛰어지지 않는다. v1은 좌표
+# 기반 재실험용으로 남겨둔다(재취득 100분).
+TRAJ_CACHE_DIR = os.path.join(OUT_DIR, "clip_trajectory_cache_v2")
 
 BALL_MODEL_PATH = os.path.join(ROOT, "models", "ball_broadcast_v1.pt")
 
@@ -130,7 +134,7 @@ def make_trajectory_extractor(model, window_start: float, window_end: float, kee
     os.makedirs(TRAJ_CACHE_DIR, exist_ok=True)
     state: dict = {"game_pk": None, "cached": {}}
 
-    def extract(clip: PitchClip) -> list[tuple[float, float]]:
+    def extract(clip: PitchClip) -> list[tuple[int, float, float]]:
         cache_path = os.path.join(TRAJ_CACHE_DIR, f"{clip.game_pk}.jsonl")
         if state["game_pk"] != clip.game_pk:
             state["game_pk"] = clip.game_pk
@@ -155,12 +159,13 @@ def make_trajectory_extractor(model, window_start: float, window_end: float, kee
             if not keep_clips:
                 os.remove(path)
 
-        # JSON 왕복 후에는 튜플이 리스트가 되므로 형태를 맞춰 넘긴다.
+        # JSON 왕복 후에는 튜플이 리스트가 되므로 형태를 맞춰 넘긴다. 길이는 고정하지
+        # 않는다 — v1 캐시는 (x, y, conf) 3개, v2는 박스 크기가 붙어 5개다.
         normalized = [
-            (frame_idx, [(float(x), float(y), float(c)) for x, y, c in detections])
+            (frame_idx, [tuple(float(v) for v in detection) for detection in detections])
             for frame_idx, detections in candidates
         ]
-        return longest_moving_chain(normalized, MAX_JUMP_PX, MIN_TOTAL_MOVE_PX)
+        return longest_moving_chain_frames(normalized, MAX_JUMP_PX, MIN_TOTAL_MOVE_PX)
 
     return extract
 

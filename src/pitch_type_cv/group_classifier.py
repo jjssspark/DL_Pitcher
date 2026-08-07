@@ -7,11 +7,20 @@ from pitch_type_cv.trajectory_features import FEATURE_COLUMNS
 
 
 def train_classifier(
-    X: pd.DataFrame, y: list[str], random_state: int = 42
+    X: pd.DataFrame,
+    y: list[str],
+    random_state: int = 42,
+    feature_columns: list[str] | None = None,
 ) -> GradientBoostingClassifier:
-    """FEATURE_COLUMNS 특징으로 3그룹 분류기를 학습한다."""
+    """
+    FEATURE_COLUMNS 특징으로 3그룹 분류기를 학습한다.
+
+    feature_columns를 주면 그 부분집합만 쓴다 — 절제 실험이 프로덕션과 같은
+    하이퍼파라미터로 돌게 하기 위한 것이다.
+    """
+    columns = feature_columns or FEATURE_COLUMNS
     model = GradientBoostingClassifier(random_state=random_state)
-    model.fit(X[FEATURE_COLUMNS], y)
+    model.fit(X[columns], y)
     return model
 
 

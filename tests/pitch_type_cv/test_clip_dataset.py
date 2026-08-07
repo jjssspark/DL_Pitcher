@@ -4,7 +4,10 @@ from pitch_type_cv.clip_dataset import build_clip_dataset
 from pitch_type_cv.savant_clips import PitchClip
 
 # 3점 이상이고 실제로 이동하는 궤적 — compute_trajectory_features가 특징을 돌려준다.
-VALID_TRAJECTORY = [(100.0, 100.0), (110.0, 120.0), (120.0, 145.0), (130.0, 175.0)]
+# 추출기는 (frame_idx, x, y)를 돌려준다. 좌표만으로는 경과 프레임을 알 수 없기 때문이다.
+VALID_TRAJECTORY = [
+    (20, 100.0, 100.0), (21, 110.0, 120.0), (23, 120.0, 145.0), (24, 130.0, 175.0),
+]
 
 
 def _clip(play_id: str = "p1", pitch_type: str = "FF", game_pk: int = 1) -> PitchClip:
@@ -28,11 +31,24 @@ def test_keeps_row_for_pitch_without_trajectory():
     궤적을 못 잡은 투구도 행으로 남긴다. 선택 편향을 재려면 분모가 '궤적이 잡힌 투구'가
     아니라 '전체 투구'여야 한다 — 빠른 공일수록 사슬이 끊기므로 버리면 편향이 감춰진다.
     """
-    df = build_clip_dataset([_clip()], lambda clip: [(1.0, 1.0)])
+    df = build_clip_dataset([_clip()], lambda clip: [(5, 1.0, 1.0)])
     assert len(df) == 1
     assert not df.iloc[0]["has_trajectory"]
     assert math.isnan(df.iloc[0]["curvature_ratio"])
     assert df.iloc[0]["group"] == "FASTBALL"
+
+
+def test_passes_frame_indices_through_to_features():
+    """
+    추출기가 준 frame_idx가 특징 계산까지 도달해야 한다. 중간에서 좌표만 넘기면
+    frame_span이 조용히 '점 개수 - 1'로 퇴화하고, 감지가 빠진 프레임이 사라진다.
+    """
+    df = build_clip_dataset([_clip()], lambda clip: VALID_TRAJECTORY)
+    row = df.iloc[0]
+
+    assert row["frame_span"] == 4      # 20 -> 24 (프레임 22 누락)
+    assert row["end_frame"] == 24
+    assert row["duration_frames"] == 4
 
 
 def test_skips_pitch_type_outside_three_groups():

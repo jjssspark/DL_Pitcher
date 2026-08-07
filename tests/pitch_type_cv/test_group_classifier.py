@@ -49,6 +49,20 @@ def test_train_and_predict_recovers_correct_group():
     assert sum(probabilities.values()) == pytest.approx(1.0, abs=1e-6)
 
 
+def test_train_classifier_accepts_a_feature_subset():
+    """
+    절제 실험은 같은 데이터에 특징 부분집합만 바꿔가며 학습한다. 실험 스크립트가
+    sklearn을 따로 부르면 하이퍼파라미터가 프로덕션과 갈라진다.
+    """
+    X, y = _synthetic_dataset()
+    subset = ["apparent_speed_px_per_frame", "curvature_ratio"]
+
+    model = train_classifier(X, y, feature_columns=subset)
+
+    assert list(model.feature_names_in_) == subset
+    assert model.n_features_in_ == 2
+
+
 def test_save_and_load_classifier_preserves_predictions(tmp_path):
     X, y = _synthetic_dataset()
     model = train_classifier(X, y)

@@ -13,7 +13,19 @@ FEATURE_COLUMNS = [
     "vertical_drop_px",
     "horizontal_deviation_px",
     "apparent_speed_px_per_frame",
+    # 아래는 2026-08-07 추가. OFFSPEED(체인지업·스플리터)는 패스트볼과 궤적 '모양'이
+    # 비슷하고 속도만 다른데 위 7개는 전부 모양이라, f1이 0.14에 묶여 있었다.
+    "frame_span",
+    "end_frame",
+    "speed_ratio_late_early",
+    "release_x",
+    "release_y",
+    "late_drop_ratio",
+    "vertical_accel_px",
 ]
+
+# 특징 확장 전의 집합. 절제 실험에서 기준으로 쓴다.
+GEOMETRY_ONLY_COLUMNS = FEATURE_COLUMNS[:7]
 
 
 def _max_perpendicular_deviation(trajectory: list[tuple[float, float]]) -> float:
@@ -32,17 +44,23 @@ def _max_perpendicular_deviation(trajectory: list[tuple[float, float]]) -> float
 
 
 def compute_trajectory_features(
-    trajectory: list[tuple[float, float]], min_points: int = 3
+    trajectory: list[tuple[float, float]],
+    min_points: int = 3,
+    frame_indices: list[int] | None = None,
 ) -> dict | None:
     """
     궤적(픽셀 좌표 시퀀스)에서 구종 그룹 분류용 특징을 계산한다.
     포인트 수가 min_points 미만이면 None (궤적 감지 실패로 간주, 해당 샘플 제외).
+
+    frame_indices는 각 좌표가 나온 프레임 번호다. 주면 시간 계열 특징이 실제 경과
+    프레임으로 계산되고, 없으면 연속 프레임으로 가정한다(구 OCR 경로 호출 호환).
     """
     if len(trajectory) < min_points:
         return None
 
     xs = [p[0] for p in trajectory]
     ys = [p[1] for p in trajectory]
+    frames = list(frame_indices) if frame_indices else list(range(len(trajectory)))
 
     straight_line_px = math.hypot(xs[-1] - xs[0], ys[-1] - ys[0])
     path_length_px = sum(
@@ -63,7 +81,74 @@ def compute_trajectory_features(
         "vertical_drop_px": ys[-1] - ys[0],
         "horizontal_deviation_px": _max_perpendicular_deviation(trajectory),
         "apparent_speed_px_per_frame": apparent_speed_px_per_frame,
+        # 시간 계열: 같은 구간을 지나는 데 걸린 프레임 수가 곧 속도의 역수다.
+        # duration_frames와 다르다 — 저쪽은 감지된 '점의 개수'라 누락 프레임을 못 센다.
+        "frame_span": frames[-1] - frames[0],
+        # 윈도우가 클립 시작 기준으로 고정돼 있어(2.8~4.2초, ADR-0010) 프레임 번호가
+        # 클립 간 비교 가능하다. 느린 공은 미트에 늦게 도달한다.
+        "end_frame": frames[-1],
+        "speed_ratio_late_early": _late_over_early_speed(xs, ys, frames),
+        "release_x": xs[0],
+        "release_y": ys[0],
+        "late_drop_ratio": _late_drop_ratio(ys),
+        "vertical_accel_px": _vertical_acceleration(ys, frames),
     }
+
+
+def _late_over_early_speed(
+    xs: list[float], ys: list[float], frames: list[int]
+) -> float:
+    """
+    궤적 후반부 / 전반부의 프레임당 속도 비.
+
+    원근 때문에 공이 카메라에 가까워질수록 픽셀 속도가 커진다. 그 증가율은 절대
+    속도와 달리 화면 배율에 덜 민감해, 픽셀 좌표만 있어도 남는 몇 안 되는 속도 단서다.
+    반드시 프레임당으로 나눈다 — 감지가 빠진 구간의 스텝을 그대로 쓰면 가속으로 오인한다.
+    """
+    speeds = [
+        math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1]) / max(1, frames[i] - frames[i - 1])
+        for i in range(1, len(xs))
+    ]
+    if not speeds:
+        return 1.0
+
+    split = len(speeds) // 2 or 1          # 스텝이 1개뿐이면 전후 구분이 없다 -> 1.0
+    early = _mean(speeds[:split])
+    late = _mean(speeds[split:])
+    if early <= 0 or not late:
+        return 1.0
+    return late / early
+
+
+def _late_drop_ratio(ys: list[float]) -> float:
+    """
+    전체 낙차 중 후반 절반에서 생긴 비율.
+
+    체인지업·스플리터는 낙차가 후반에 몰린다. 전체 낙차(vertical_drop_px)가 같아도
+    분포가 다르므로 기존 특징으로는 구분되지 않는다. 낙차가 0이면 0.5(중립)를 준다.
+    """
+    total = ys[-1] - ys[0]
+    if abs(total) < 1e-9:
+        return 0.5
+    mid = len(ys) // 2
+    return (ys[-1] - ys[mid]) / total
+
+
+def _vertical_acceleration(ys: list[float], frames: list[int]) -> float:
+    """
+    y를 프레임의 2차식으로 적합했을 때의 d²y/dt². 느린 공일수록 중력에 오래 노출된다.
+
+    프레임 번호가 3개 미만으로 서로 다르면 2차 적합이 불정이므로 0을 준다.
+    """
+    t = np.asarray(frames, dtype=float) - frames[0]
+    if len(set(frames)) < 3:
+        return 0.0
+    quadratic, _linear, _const = np.polyfit(t, np.asarray(ys, dtype=float), 2)
+    return float(2.0 * quadratic)
+
+
+def _mean(values: list[float]) -> float:
+    return sum(values) / len(values) if values else 0.0
 
 
 def longest_smooth_run(
@@ -103,6 +188,23 @@ def longest_moving_chain(
     max_gap_frames: int = 2,
     min_step_px: float = 3.0,
 ) -> list[tuple[float, float]]:
+    """좌표만 필요한 호출부용. 실제 계산은 longest_moving_chain_frames가 한다."""
+    return [
+        (x, y)
+        for _frame, x, y in longest_moving_chain_frames(
+            candidates_by_frame, max_jump_px, min_total_move_px,
+            max_gap_frames=max_gap_frames, min_step_px=min_step_px,
+        )
+    ]
+
+
+def longest_moving_chain_frames(
+    candidates_by_frame: list[tuple[int, list[tuple[float, float, float]]]],
+    max_jump_px: float,
+    min_total_move_px: float,
+    max_gap_frames: int = 2,
+    min_step_px: float = 3.0,
+) -> list[tuple[int, float, float]]:
     """
     프레임별 감지 후보들 중 **실제로 이동하는** 최장 사슬을 고른다.
 
@@ -125,10 +227,12 @@ def longest_moving_chain(
     잘라낸다. 미트에 들어간 뒤의 정지 꼬리도 같은 처리로 없어진다 — 남겨두면 곡률이
     평평해져 구종 차이를 지운다.
     """
+    # 감지 후보는 (x, y, conf) 또는 박스 크기가 붙은 (x, y, conf, w, h)로 들어온다.
+    # 사슬은 좌표만 쓰므로 앞 둘만 떼어 구·신 캐시 스키마를 모두 받는다.
     nodes = _drop_static_nodes([
-        (frame_idx, x, y)
+        (frame_idx, float(detection[0]), float(detection[1]))
         for frame_idx, detections in candidates_by_frame
-        for x, y, _conf in detections
+        for detection in detections
     ])
     if not nodes:
         return []
@@ -155,7 +259,7 @@ def longest_moving_chain(
                 prev[i] = j
 
     # 운동성 조건을 만족하는 사슬 중 가장 긴 것. 정지 사슬은 아무리 길어도 탈락한다.
-    best_chain: list[tuple[float, float]] = []
+    best_chain: list[tuple[int, float, float]] = []
     for end in range(len(nodes)):
         chain_idx = []
         cursor = end
@@ -165,7 +269,10 @@ def longest_moving_chain(
         chain_idx.reverse()
 
         points = _trim_chain_ends([nodes[k] for k in chain_idx], min_step_px)
-        if len(points) < 2 or math.dist(points[0], points[-1]) < min_total_move_px:
+        if len(points) < 2:
+            continue
+        displacement = math.dist(points[0][1:], points[-1][1:])
+        if displacement < min_total_move_px:
             continue
         if len(points) > len(best_chain):
             best_chain = points
@@ -175,7 +282,7 @@ def longest_moving_chain(
 
 def _trim_chain_ends(
     nodes: list[tuple[int, float, float]], min_step_px: float, outlier_ratio: float = 3.0
-) -> list[tuple[float, float]]:
+) -> list[tuple[int, float, float]]:
     """
     사슬 양끝에서 (1) 정지 구간과 (2) 속도 이상치를 잘라낸다.
 
@@ -202,7 +309,7 @@ def _trim_chain_ends(
             continue
         break
 
-    return [(x, y) for _frame, x, y in trimmed]
+    return trimmed
 
 
 def _drop_static_nodes(
@@ -285,13 +392,20 @@ def extract_trajectory_candidates(
     target_fps: float | None = None,
     imgsz: int = 640,
     conf: float | None = None,
-) -> list[tuple[int, list[tuple[float, float, float]]]]:
+) -> list[tuple[int, list[tuple[float, float, float, float, float]]]]:
     """
-    윈도우 안 프레임별로 **모든** 감지 후보를 (frame_idx, [(x, y, conf), ...])로 돌려준다.
+    윈도우 안 프레임별로 **모든** 감지 후보를
+    (frame_idx, [(x, y, conf, w, h), ...])로 돌려준다.
 
     `extract_trajectory_points`는 프레임마다 최고 신뢰도 1건만 남기는데, 정지 오탐이
     실제 공보다 신뢰도가 높은 경우가 있어 그 시점에 공이 통째로 버려진다(TS-017).
     후보를 전부 남겨야 longest_moving_chain이 운동성으로 고를 수 있다.
+
+    박스 크기(w, h)를 함께 남기는 이유: 픽셀 좌표만으로는 절대 속도를 복원할 수 없어
+    OFFSPEED(체인지업·스플리터)가 패스트볼과 갈리지 않는다는 것이 실측으로 확인됐다
+    (좌표 특징 7개를 추가해도 OFFSPEED AUC 0.641 -> 0.648). 공이 카메라에 가까워지는
+    속도, 즉 박스가 커지는 속도가 남은 유일한 속도 대리 지표다. mp4는 처리 후 지우므로
+    여기서 안 남기면 재수집이 한 번 더 필요해진다.
     """
     from yolo_detector import detect_ball_in_frame  # 지연 import: 순수 함수는 ultralytics에 비의존
 
@@ -304,10 +418,13 @@ def extract_trajectory_candidates(
         detections = detect_ball_in_frame(model, frame, imgsz=imgsz, conf=conf)
         if not detections:
             continue
-        result.append((
-            frame_idx,
-            [(float(d["cx"]), float(d["cy"]), float(d["conf"])) for d in detections],
-        ))
+        result.append((frame_idx, [
+            (
+                float(d["cx"]), float(d["cy"]), float(d["conf"]),
+                float(d["bbox"][2] - d["bbox"][0]), float(d["bbox"][3] - d["bbox"][1]),
+            )
+            for d in detections
+        ]))
     return result
 
 
