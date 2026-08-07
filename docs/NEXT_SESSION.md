@@ -136,13 +136,24 @@ runpy.run_path('scripts/build_pitch_group_clips_dataset.py', run_name='__main__'
 
 여기까지 만든 것이 한 번도 서비스에 붙지 않았다. 수치는 이미 쓸 만하다(LOGO 0.783, AUC 0.881).
 
-- 학습된 2분류 모델을 저장하는 경로가 아직 없다. `scripts/eval_two_class.py`는 매번
-  학습만 하고 버린다 — 모델 직렬화부터 필요하다
-- 영상 업로드 → 궤적 추출 → FASTBALL/BREAKING 확률. 궤적을 못 잡으면(14%) 그 사실을
-  숨기지 말고 표시한다
-- 앱 UI는 이전 세션에서 레이아웃·가독성만 손봤다(고정 480px iframe 제거, 스코어보드
-  flex 정렬, 확률 차트 가로 막대, 이모지 제거). 야구 분석 시스템다운 방향으로는
-  아직 안 갔다
+**먼저 정할 것 — 앱이 무엇을 보여줄 것인가.** 이게 명세된 적이 없다.
+`streamlit_app/`은 `pitch_type_cv`를 한 줄도 import하지 않는다. 두 모델이 **다른 문제를
+푼다**: 앱의 `models/pitch_predictor.h5`(BiLSTM, ADR-0002)는 Statcast 시퀀스로 *다음* 투구를
+예측하고, CV 경로는 영상으로 *방금 던진* 공을 분류한다. 붙이는 방식이 두 가지다.
+
+1. CV 예측을 독립 화면으로 — 영상 업로드 → 궤적 → FASTBALL/BREAKING 확률
+2. **예측 vs 실측 대조** — BiLSTM이 예측한 다음 구종 옆에 영상에서 실측한 실제 구종.
+   앱 UI에 이미 "실측 / 예측" 라벨이 있고 이쪽이 원래 그림으로 보이지만 적힌 적은 없다
+
+**모델 직렬화 상태**: `save_classifier`/`load_classifier`는 `src/pitch_type_cv/group_classifier.py`에
+이미 있고, 노트북이 3분류 `output/pitch_type_cv/group_classifier.pkl`을 저장한다.
+**없는 것은 2분류 모델 저장**이다 — `scripts/eval_two_class.py`는 매번 학습하고 버린다.
+
+**궤적을 못 잡는 14%를 숨기지 말 것.** 확보율이 그룹별 80.9~91.3%, 경기별 FASTBALL은
+71~92%로 흔들린다(아래 (C)). LOGO 0.783은 '궤적이 잡힌 투구'에 한정된 수치다.
+
+앱 UI는 이전 세션에서 레이아웃·가독성만 손봤다(고정 480px iframe 제거, 스코어보드
+flex 정렬, 확률 차트 가로 막대, 이모지 제거). 야구 분석 시스템다운 방향으로는 아직 안 갔다
 
 ### (B) 경기를 더 늘린다
 
