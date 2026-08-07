@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
@@ -35,6 +36,7 @@ from pitch_type_cv.savant_clips import (  # noqa: E402
     statsapi_feed_url,
 )
 from pitch_type_cv.trajectory_features import (  # noqa: E402
+    box_sizes_for_chain,
     extract_trajectory_candidates,
     longest_moving_chain_frames,
 )
@@ -120,7 +122,9 @@ def load_candidate_cache(cache_path: str) -> dict[str, list]:
     return cached
 
 
-def make_trajectory_extractor(model, window_start: float, window_end: float, keep_clips: bool):
+def make_trajectory_extractor(
+    model, window_start: float, window_end: float, keep_clips: bool, state: dict
+):
     """
     클립을 받아 궤적을 뽑는 콜러블을 만든다.
 
@@ -130,21 +134,19 @@ def make_trajectory_extractor(model, window_start: float, window_end: float, kee
 
     처리가 끝난 mp4는 기본적으로 지운다. 4경기 × 280투구 × 4.5MB = 5GB라
     캐시로 남길 이유가 없다 — 재취득은 play_id만 있으면 된다.
+
+    state["futures"]에 main이 미리 띄워둔 다운로드가 들어온다. 직접 받지 않고
+    그 결과를 기다리는 이유는 같은 클립을 두 번 받지 않기 위해서다.
     """
     os.makedirs(TRAJ_CACHE_DIR, exist_ok=True)
-    state: dict = {"game_pk": None, "cached": {}}
 
-    def extract(clip: PitchClip) -> list[tuple[int, float, float]]:
+    def extract(clip: PitchClip) -> list[tuple[int, float, float, float]]:
         cache_path = os.path.join(TRAJ_CACHE_DIR, f"{clip.game_pk}.jsonl")
-        if state["game_pk"] != clip.game_pk:
-            state["game_pk"] = clip.game_pk
-            state["cached"] = load_candidate_cache(cache_path)
-            if state["cached"]:
-                print(f"  [궤적] 캐시 사용: {len(state['cached'])}개")
 
         candidates = state["cached"].get(clip.play_id)
         if candidates is None:
-            path = fetch_clip(clip.play_id)
+            future = state["futures"].get(clip.play_id)
+            path = future.result() if future is not None else fetch_clip(clip.play_id)
             if path is None:
                 return []
             # timestamp=window_end, lookback_start=(end-start) -> [start, end] 구간
@@ -165,7 +167,9 @@ def make_trajectory_extractor(model, window_start: float, window_end: float, kee
             (frame_idx, [tuple(float(v) for v in detection) for detection in detections])
             for frame_idx, detections in candidates
         ]
-        return longest_moving_chain_frames(normalized, MAX_JUMP_PX, MIN_TOTAL_MOVE_PX)
+        chain = longest_moving_chain_frames(normalized, MAX_JUMP_PX, MIN_TOTAL_MOVE_PX)
+        sizes = box_sizes_for_chain(chain, normalized)
+        return [(f, x, y, size) for (f, x, y), size in zip(chain, sizes)]
 
     return extract
 
@@ -176,6 +180,10 @@ def main() -> None:
     parser.add_argument("--window-end", type=float, default=DEFAULT_WINDOW_END)
     parser.add_argument("--keep-clips", action="store_true",
                         help="처리 후 mp4를 지우지 않는다 (4경기 기준 약 5GB)")
+    # Savant는 연결당 대역폭을 제한한다 — 실측 단일 연결 0.1MB/s, 6연결 0.52MB/s.
+    # 직렬로는 클립당 30초라 1193구에 10시간이 걸린다.
+    parser.add_argument("--download-workers", type=int, default=6,
+                        help="동시 다운로드 연결 수")
     args = parser.parse_args()
 
     logging.basicConfig(level=logging.INFO, format="%(message)s")
@@ -191,22 +199,34 @@ def main() -> None:
         model.to("mps")
         print("       MPS 가속 사용")
 
+    state: dict = {"cached": {}, "futures": {}}
     extract_trajectory = make_trajectory_extractor(
-        model, args.window_start, args.window_end, args.keep_clips
+        model, args.window_start, args.window_end, args.keep_clips, state
     )
 
     print(f"[2/3] {len(GAME_LIST)}개 경기 처리 "
-          f"(윈도우 {args.window_start}~{args.window_end}초)...")
+          f"(윈도우 {args.window_start}~{args.window_end}초, "
+          f"다운로드 {args.download_workers}연결)...")
     headers = {"User-Agent": USER_AGENT}
     frames = []
-    for game_pk in GAME_LIST:
-        try:
-            feed = requests.get(statsapi_feed_url(game_pk), headers=headers, timeout=60).json()
-            clips = parse_pitches(feed, game_pk)
-            print(f"  game_pk={game_pk}: {len(clips)}투구")
-            frames.append(build_clip_dataset(clips, extract_trajectory))
-        except Exception as exc:
-            print(f"  game_pk={game_pk} 처리 실패, 건너뜁니다: {exc}")
+    with ThreadPoolExecutor(max_workers=args.download_workers) as executor:
+        for game_pk in GAME_LIST:
+            try:
+                feed = requests.get(
+                    statsapi_feed_url(game_pk), headers=headers, timeout=60
+                ).json()
+                clips = parse_pitches(feed, game_pk)
+
+                cache_path = os.path.join(TRAJ_CACHE_DIR, f"{game_pk}.jsonl")
+                state["cached"] = load_candidate_cache(cache_path)
+                pending = [c.play_id for c in clips if c.play_id not in state["cached"]]
+                state["futures"] = {pid: executor.submit(fetch_clip, pid) for pid in pending}
+
+                print(f"  game_pk={game_pk}: {len(clips)}투구 "
+                      f"(캐시 {len(state['cached'])} / 받을 것 {len(pending)})", flush=True)
+                frames.append(build_clip_dataset(clips, extract_trajectory))
+            except Exception as exc:
+                print(f"  game_pk={game_pk} 처리 실패, 건너뜁니다: {exc}")
 
     import pandas as pd
     non_empty = [f for f in frames if not f.empty]

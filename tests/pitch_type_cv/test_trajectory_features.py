@@ -127,6 +127,70 @@ def test_vertical_accel_is_zero_for_straight_descent():
     assert features["vertical_accel_px"] == pytest.approx(0.0, abs=1e-6)
 
 
+# --- 박스 크기 계열: 공이 카메라에 가까워지는 속도 = 절대 속도의 대리 지표 ---
+
+def test_box_growth_is_positive_when_ball_approaches_camera():
+    """
+    좌표만으로는 절대 속도를 복원할 수 없다는 것이 실측으로 확인됐다(TS-023).
+    박스가 커지는 속도가 남은 유일한 속도 단서다.
+    """
+    trajectory = [(0.0, float(t)) for t in range(5)]
+    fast = compute_trajectory_features(
+        trajectory, frame_indices=list(range(5)), box_sizes=[10.0, 14.0, 18.0, 22.0, 26.0]
+    )
+    slow = compute_trajectory_features(
+        trajectory, frame_indices=list(range(5)), box_sizes=[10.0, 11.0, 12.0, 13.0, 14.0]
+    )
+
+    assert fast["box_growth_per_frame"] == pytest.approx(4.0, abs=1e-6)
+    assert slow["box_growth_per_frame"] == pytest.approx(1.0, abs=1e-6)
+    assert fast["release_box_size"] == pytest.approx(10.0)
+
+
+def test_box_growth_uses_a_fit_not_the_endpoints():
+    """감지 박스는 정수 픽셀이라 끝점 두 개만 쓰면 1~2px 노이즈가 그대로 기울기가 된다."""
+    trajectory = [(0.0, float(t)) for t in range(5)]
+    # 끝점만 보면 (12-10)/4 = 0.5. 전체 추세는 1.0에 가깝다.
+    features = compute_trajectory_features(
+        trajectory, frame_indices=list(range(5)), box_sizes=[10.0, 12.0, 13.0, 14.0, 12.0]
+    )
+
+    assert features["box_growth_per_frame"] > 0.5
+
+
+def test_box_features_are_zero_when_cache_has_no_box_size():
+    """v1 캐시에는 박스 크기가 없다. 그 경우에도 특징 벡터의 길이는 같아야 한다."""
+    features = compute_trajectory_features([(0.0, 0.0), (1.0, 1.0), (2.0, 2.0)])
+
+    assert features["box_growth_per_frame"] == 0.0
+    assert features["release_box_size"] == 0.0
+
+
+def test_box_sizes_for_chain_matches_detections_by_coordinate():
+    """
+    사슬은 좌표만 돌려주므로 박스 크기를 후보에서 되찾아야 한다. 같은 프레임에
+    후보가 여럿이면 사슬이 고른 그 좌표의 것을 집어야 한다.
+    """
+    from pitch_type_cv.trajectory_features import box_sizes_for_chain
+
+    candidates = [
+        (10, [(601.0, 181.0, 0.7, 40.0, 40.0), (700.0, 260.0, 0.4, 10.0, 10.0)]),
+        (11, [(690.0, 270.0, 0.4, 12.0, 12.0)]),
+    ]
+    chain = [(10, 700.0, 260.0), (11, 690.0, 270.0)]
+
+    assert box_sizes_for_chain(chain, candidates) == [10.0, 12.0]
+
+
+def test_box_sizes_for_chain_returns_zeros_for_old_cache_schema():
+    from pitch_type_cv.trajectory_features import box_sizes_for_chain
+
+    candidates = [(10, [(700.0, 260.0, 0.4)]), (11, [(690.0, 270.0, 0.4)])]
+    chain = [(10, 700.0, 260.0), (11, 690.0, 270.0)]
+
+    assert box_sizes_for_chain(chain, candidates) == [0.0, 0.0]
+
+
 def test_new_features_are_finite_on_degenerate_trajectory():
     """
     낙차 0 · 이동 0 같은 퇴화 궤적에서 0으로 나누면 NaN/inf가 특징에 섞이고,

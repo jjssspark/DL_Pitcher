@@ -22,6 +22,11 @@ FEATURE_COLUMNS = [
     "release_y",
     "late_drop_ratio",
     "vertical_accel_px",
+    # 좌표 기반 확장으로는 OFFSPEED가 안 갈린다는 것이 실측으로 확인돼(TS-023) 추가한
+    # 속도 대리 지표. 박스가 커지는 속도 = 공이 카메라에 가까워지는 속도다.
+    # v1 캐시(박스 크기 없음)로 계산하면 둘 다 0이 된다.
+    "box_growth_per_frame",
+    "release_box_size",
 ]
 
 # 특징 확장 전의 집합. 절제 실험에서 기준으로 쓴다.
@@ -47,6 +52,7 @@ def compute_trajectory_features(
     trajectory: list[tuple[float, float]],
     min_points: int = 3,
     frame_indices: list[int] | None = None,
+    box_sizes: list[float] | None = None,
 ) -> dict | None:
     """
     궤적(픽셀 좌표 시퀀스)에서 구종 그룹 분류용 특징을 계산한다.
@@ -92,7 +98,47 @@ def compute_trajectory_features(
         "release_y": ys[0],
         "late_drop_ratio": _late_drop_ratio(ys),
         "vertical_accel_px": _vertical_acceleration(ys, frames),
+        "box_growth_per_frame": _box_growth_per_frame(box_sizes, frames),
+        "release_box_size": box_sizes[0] if box_sizes else 0.0,
     }
+
+
+def _box_growth_per_frame(box_sizes: list[float] | None, frames: list[int]) -> float:
+    """
+    박스 크기의 프레임당 증가율 (최소자승 기울기).
+
+    끝점 두 개의 차로 재지 않는다 — 감지 박스는 정수 픽셀이고 공이 10~20px라
+    1~2px 노이즈가 그대로 기울기가 된다. 전체 점에 직선을 맞추는 편이 안정적이다.
+    박스 크기가 없는 v1 캐시에서는 0을 준다.
+    """
+    if not box_sizes or len(set(frames)) < 2:
+        return 0.0
+    t = np.asarray(frames, dtype=float) - frames[0]
+    slope, _intercept = np.polyfit(t, np.asarray(box_sizes, dtype=float), 1)
+    return float(slope)
+
+
+def box_sizes_for_chain(
+    chain: list[tuple[int, float, float]],
+    candidates_by_frame: list[tuple[int, list[tuple]]],
+) -> list[float]:
+    """
+    사슬의 각 점에 대응하는 감지 박스 크기를 후보에서 되찾는다.
+
+    사슬은 좌표만 돌려주는데, 한 프레임에 후보가 여럿이면(정지 오탐 + 실제 공)
+    사슬이 고른 그 좌표의 박스를 집어야 한다. 그래서 좌표로 대조한다.
+    박스 크기가 없는 구 스키마 후보는 0으로 둔다.
+    """
+    by_frame = dict(candidates_by_frame)
+    sizes = []
+    for frame_idx, x, y in chain:
+        size = 0.0
+        for detection in by_frame.get(frame_idx, []):
+            if len(detection) >= 5 and detection[0] == x and detection[1] == y:
+                size = math.sqrt(float(detection[3]) * float(detection[4]))
+                break
+        sizes.append(size)
+    return sizes
 
 
 def _late_over_early_speed(

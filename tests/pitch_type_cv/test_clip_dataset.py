@@ -4,9 +4,11 @@ from pitch_type_cv.clip_dataset import build_clip_dataset
 from pitch_type_cv.savant_clips import PitchClip
 
 # 3점 이상이고 실제로 이동하는 궤적 — compute_trajectory_features가 특징을 돌려준다.
-# 추출기는 (frame_idx, x, y)를 돌려준다. 좌표만으로는 경과 프레임을 알 수 없기 때문이다.
+# 추출기는 (frame_idx, x, y, box_size)를 돌려준다. 좌표만으로는 경과 프레임도,
+# 공이 카메라에 가까워지는 속도도 알 수 없기 때문이다.
 VALID_TRAJECTORY = [
-    (20, 100.0, 100.0), (21, 110.0, 120.0), (23, 120.0, 145.0), (24, 130.0, 175.0),
+    (20, 100.0, 100.0, 10.0), (21, 110.0, 120.0, 11.0),
+    (23, 120.0, 145.0, 13.0), (24, 130.0, 175.0, 14.0),
 ]
 
 
@@ -31,7 +33,7 @@ def test_keeps_row_for_pitch_without_trajectory():
     궤적을 못 잡은 투구도 행으로 남긴다. 선택 편향을 재려면 분모가 '궤적이 잡힌 투구'가
     아니라 '전체 투구'여야 한다 — 빠른 공일수록 사슬이 끊기므로 버리면 편향이 감춰진다.
     """
-    df = build_clip_dataset([_clip()], lambda clip: [(5, 1.0, 1.0)])
+    df = build_clip_dataset([_clip()], lambda clip: [(5, 1.0, 1.0, 9.0)])
     assert len(df) == 1
     assert not df.iloc[0]["has_trajectory"]
     assert math.isnan(df.iloc[0]["curvature_ratio"])
@@ -49,6 +51,8 @@ def test_passes_frame_indices_through_to_features():
     assert row["frame_span"] == 4      # 20 -> 24 (프레임 22 누락)
     assert row["end_frame"] == 24
     assert row["duration_frames"] == 4
+    assert row["release_box_size"] == 10.0
+    assert row["box_growth_per_frame"] > 0
 
 
 def test_skips_pitch_type_outside_three_groups():
