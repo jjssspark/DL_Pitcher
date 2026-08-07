@@ -5,7 +5,9 @@
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body { background: transparent; }
-  video { width: 100%; display: block; }
+  /* 로드 전에도 16:9 자리를 유지한다 — 안 그러면 영상이 붙는 순간 레이아웃이 튄다 */
+  video { width: 100%; aspect-ratio: 16 / 9; display: block;
+          background: #06090f; border-radius: 12px; }
 </style>
 </head>
 <body>
@@ -69,8 +71,18 @@
     if (!wantPlay && !vid.paused){ vid.pause(); }
   });
 
+  // iframe 높이를 영상 실제 높이에 맞춘다. 480px 고정이던 시절에는 영상이 로드되기
+  // 전(<video>가 125px로 쪼그라든 상태)에 355px가 빈 검은 영역으로 남아 화면을 잡아먹었다.
+  // aspect-ratio 16/9가 걸려 있어 로드 전후 높이가 같으므로 레이아웃이 튀지 않는다.
+  function syncHeight() {
+    stHeight(Math.ceil(vid.getBoundingClientRect().height));
+  }
+
+  window.addEventListener("resize", syncHeight);
+  vid.addEventListener("loadedmetadata", syncHeight);
+
   stReady();
-  stHeight(480);
+  syncHeight();
 </script>
 </body>
 </html>

@@ -193,6 +193,9 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 FIXED_DEMO_GAME_PK   = 775300
 FIXED_DEMO_VIDEO_URL = "https://youtu.be/gMm3EODDb6w"
 TEAM_COLORS = {"NYY": "#0C2340", "LAD": "#005A9C"}  # 고정 데모 게임은 이 두 팀만 등장
+# 어두운 배경(#0a1120)에 쓸 수 있게 밝기를 올린 변형. 구단 원색을 그대로 쓰면
+# NYY 네이비(#0C2340)가 배경과 명도 차가 거의 없어 팀명이 보이지 않는다.
+TEAM_ACCENTS = {"NYY": "#8aa9d6", "LAD": "#4d9fe0"}
 FIXED_DEMO_VIDEO_DURATION_SEC = 8231  # 고정 데모 YouTube 영상 총 길이(초)
 
 # ══ 구종 메타 ══════════════════════════════════════════════════════
@@ -935,12 +938,15 @@ if loaded:
     balls_html   = _seg_dots(cur["balls"],   3, "#3b82f6")
     strikes_html = _seg_dots(cur["strikes"], 2, "#f59e0b")
     outs_html    = _seg_dots(cur["outs"],    2, "#ef4444")
-    _aw_color    = TEAM_COLORS.get(aw, "#94a3b8")
-    _hw_color    = TEAM_COLORS.get(hw, "#94a3b8")
+    _aw_color    = TEAM_ACCENTS.get(aw, "#94a3b8")
+    _hw_color    = TEAM_ACCENTS.get(hw, "#94a3b8")
 
     st.markdown(
         f'<div class="scoreboard">'
-        f'<div style="display:flex;align-items:center;justify-content:space-between;gap:.8rem">'
+        # 폭을 제한하고 가운데 정렬한다. space-between으로 풀어두면 와이드 화면에서
+        # 두 팀 점수가 양 끝으로 밀려나고 가운데 900px가 빈 영역이 된다.
+        f'<div style="display:flex;align-items:center;justify-content:center;'
+        f'gap:clamp(1.5rem,6vw,5rem);max-width:760px;margin:0 auto">'
         # 원정팀
         f'<div style="text-align:center;min-width:72px">'
         f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">원정</div>'
@@ -951,7 +957,9 @@ if loaded:
         # 중앙 (이닝 + 카운트)
         f'<div style="text-align:center;flex:1">'
         f'<div style="margin-bottom:.35rem"><span class="live-badge">LIVE</span></div>'
-        f'<div class="inning-box" style="margin-bottom:.5rem;font-size:.85rem">{half}&nbsp;{cur["inning"]}회</div>'
+        # inline-block이 없으면 블록으로 늘어나 이닝 표시가 폭 전체를 채우는 빈 막대가 된다.
+        f'<div class="inning-box" style="display:inline-block;margin-bottom:.5rem;'
+        f'font-size:.85rem;padding:.3rem 1.1rem">{half}&nbsp;{cur["inning"]}회</div>'
         f'<div style="display:flex;justify-content:center;align-items:center;gap:1.1rem">'
         f'<div style="display:flex;align-items:center;gap:.32rem">'
         f'<span style="font-size:.62rem;font-weight:800;color:#60a5fa;letter-spacing:.04em">B</span>'
@@ -1149,11 +1157,11 @@ if loaded:
             if not _local_ready:
                 _sync_note = "아래 슬라이더로 투구를 이동하세요"
             elif _scan_st_note == "scanning":
-                _sync_note = "⏳ 영상 분석 중..."
+                _sync_note = "영상 분석 중…"
             elif _scan_st_note == "done":
-                _sync_note = "✅ 싱크 준비 완료 — 재생하면 자동 감지"
+                _sync_note = "싱크 준비 완료 — 재생하면 자동 감지"
             elif _pose_active:
-                _sync_note = "🔍 투구 모션 감지 중..."
+                _sync_note = "투구 모션 감지 중…"
             else:
                 _sync_note = ""
             _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | "
@@ -1337,7 +1345,7 @@ if loaded:
                     unsafe_allow_html=True)
 
             # ── 방금 던진 구종 ──
-            st.markdown('<div class="card-badge card-badge-actual">📊 실측</div>', unsafe_allow_html=True)
+            st.markdown('<div class="card-badge card-badge-actual">실측</div>', unsafe_allow_html=True)
             st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
 
             _vpd = st.session_state.get("video_pitch_data", [])
@@ -1400,7 +1408,7 @@ if loaded:
                 st.markdown(
                     '<div class="pitch-card" style="min-height:70px;display:flex;align-items:center;'
                     'justify-content:center;background:rgba(8,14,26,.5);border-color:rgba(59,130,246,.1)">'
-                    '<span style="color:#334155;font-size:.9rem">⚾ 경기 로드 후 재생</span></div>',
+                    '<span style="color:#475569;font-size:.9rem">경기 로드 후 재생</span></div>',
                     unsafe_allow_html=True)
 
             # ── 다음 구종 예측 ──
@@ -1422,7 +1430,7 @@ if loaded:
                         f'<div class="combo-badge">🔥 COMBO x{st.session_state.pred_streak}</div>',
                         unsafe_allow_html=True)
                 st.markdown(
-                    f'<div class="card-badge card-badge-pred">🔮 예측 · {_pred_basis}</div>',
+                    f'<div class="card-badge card-badge-pred">예측 · {_pred_basis}</div>',
                     unsafe_allow_html=True)
                 st.markdown(
                     f'<div class="pitch-card pred-hero card-reveal" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
@@ -1447,26 +1455,32 @@ if loaded:
                 codes  = sorted(codes, key=lambda c: -probs[c])[:7]
                 vals   = [probs[c] for c in codes]
                 colors = [PITCH_META.get(c, PITCH_META["OTHER"])["color"] for c in codes]
-                labels = [f'{c}<br><span style="font-size:7px">{PITCH_META.get(c,PITCH_META["OTHER"])["name"]}</span>' for c in codes]
-
                 _pitch_kor_names = [PITCH_META.get(c, PITCH_META["OTHER"])["name"] for c in codes]
+                # 가로 막대다. 세로로 두면 285px 폭에 7개 막대가 들어가면서 구종명이
+                # 7px로 줄고 두 줄로 구겨진다 — 가로로 눕히면 한 행에 한 구종이라
+                # 이름이 그대로 읽히고 확률 순위도 위에서부터 바로 보인다.
+                labels = [f"{c}  {n}" for c, n in zip(codes, _pitch_kor_names)]
+
                 fig = go.Figure(go.Bar(
-                    x=labels, y=vals,
+                    x=vals, y=labels, orientation="h",
                     marker=dict(color=colors, opacity=0.82,
                                 line=dict(color="rgba(255,255,255,.04)", width=1)),
                     text=[f"{v:.0%}" for v in vals], textposition="outside",
-                    textfont=dict(size=8, color="#94a3b8"),
+                    textfont=dict(size=10, color="#94a3b8"),
                     customdata=list(zip(codes, _pitch_kor_names)),
-                    hovertemplate="<b>%{customdata[0]} %{customdata[1]}</b><br>확률: %{y:.1%}<extra></extra>",
+                    hovertemplate="<b>%{customdata[0]} %{customdata[1]}</b><br>확률: %{x:.1%}<extra></extra>",
                 ))
                 fig.update_layout(
                     paper_bgcolor="rgba(0,0,0,0)", plot_bgcolor="rgba(0,0,0,0)",
-                    margin=dict(l=0, r=0, t=10, b=0), height=140, showlegend=False,
-                    xaxis=dict(tickfont=dict(size=7, color="#64748b"),
+                    margin=dict(l=0, r=8, t=6, b=6), showlegend=False,
+                    height=max(120, 26 * len(codes) + 24),
+                    bargap=0.28,
+                    yaxis=dict(autorange="reversed",   # 확률 높은 구종이 위로
+                               tickfont=dict(size=10, color="#94a3b8"),
                                gridcolor="rgba(0,0,0,0)", zeroline=False),
-                    yaxis=dict(tickformat=".0%", tickfont=dict(size=7, color="#475569"),
-                               gridcolor="rgba(148,163,184,.04)", zeroline=False,
-                               range=[0, max(vals) * 1.4 if vals else 1]),
+                    xaxis=dict(tickformat=".0%", tickfont=dict(size=8, color="#475569"),
+                               gridcolor="rgba(148,163,184,.06)", zeroline=False,
+                               range=[0, max(vals) * 1.25 if vals else 1]),
                 )
                 st.plotly_chart(fig, use_container_width=True, config={"displayModeBar": False})
 
