@@ -30,7 +30,11 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
 import pandas as pd  # noqa: E402
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support  # noqa: E402
+from sklearn.metrics import (  # noqa: E402
+    accuracy_score,
+    precision_recall_fscore_support,
+    roc_auc_score,
+)
 
 from pitch_type_cv.group_classifier import train_classifier  # noqa: E402
 from pitch_type_cv.trajectory_features import GEOMETRY_ONLY_COLUMNS  # noqa: E402
@@ -47,11 +51,18 @@ TIME_COLUMNS = ["frame_span", "end_frame", "speed_ratio_late_early"]
 # 기하 계열: 릴리스 위치와 낙차의 분포. 모양이지만 기존 7개가 재지 않던 축이다.
 GEOMETRY_EXTRA_COLUMNS = ["release_x", "release_y", "late_drop_ratio", "vertical_accel_px"]
 
+# 박스 계열: 공의 겉보기 크기 변화. v1 캐시로 만든 데이터셋에서는 두 값이 0이라
+# 이 집합이 '좌표전체'와 같아진다 — 판정 전에 캐시가 v2인지 확인할 것.
+BOX_COLUMNS = ["box_growth_per_frame", "release_box_size"]
+
+COORD_ALL = GEOMETRY_ONLY_COLUMNS + TIME_COLUMNS + GEOMETRY_EXTRA_COLUMNS
+
 FEATURE_SETS = {
     "기준(7)": GEOMETRY_ONLY_COLUMNS,
     "+시간(10)": GEOMETRY_ONLY_COLUMNS + TIME_COLUMNS,
     "+기하(11)": GEOMETRY_ONLY_COLUMNS + GEOMETRY_EXTRA_COLUMNS,
-    "전체(14)": GEOMETRY_ONLY_COLUMNS + TIME_COLUMNS + GEOMETRY_EXTRA_COLUMNS,
+    "좌표전체(14)": COORD_ALL,
+    "+박스(16)": COORD_ALL + BOX_COLUMNS,
 }
 
 LABELS = ["FASTBALL", "BREAKING", "OFFSPEED"]
@@ -81,6 +92,16 @@ def evaluate(
     precision, recall, f1, _support = precision_recall_fscore_support(
         y_true, y_pred, labels=LABELS, zero_division=0
     )
+    # 임계값과 무관한 판별력. 정확도·f1은 클래스 가중치로도 움직여서 '정보가 늘었나'와
+    # '동작점을 옮겼나'가 섞인다 — 소수 클래스 판정은 이 값으로 한다 (TS-023).
+    proba = model.predict_proba(holdout_df[columns])
+    auc = {
+        label: roc_auc_score(
+            (np.asarray(y_true) == label).astype(int),
+            proba[:, list(model.classes_).index(label)],
+        )
+        for label in LABELS
+    }
     importances = pd.Series(model.feature_importances_, index=columns)
     # 중요도가 정확히 0인 특징은 '한 번도 분기에 쓰이지 않았다'는 뜻이다. 0으로 나누는
     # 대신 무한대로 남겨 눈에 띄게 둔다 — 평평함(무신호)과는 반대 방향의 신호다.
@@ -97,7 +118,44 @@ def evaluate(
         result[f"{label}_precision"] = precision[i]
         result[f"{label}_recall"] = recall[i]
         result[f"{label}_f1"] = f1[i]
+        result[f"{label}_auc"] = auc[label]
     return result, importances
+
+
+def evaluate_logo(columns: list[str], df: pd.DataFrame) -> dict:
+    """
+    경기 단위 leave-one-game-out. 홀드아웃 1경기짜리 수치는 흔들린다 — 실측에서
+    같은 특징 집합의 OFFSPEED f1이 단일 홀드아웃 0.10, LOGO 4폴드 0.233이었다.
+    """
+    accuracies, baselines, offspeed_f1, offspeed_auc = [], [], [], []
+    for game_pk in sorted(df["game_pk"].unique()):
+        train_df = df[df["game_pk"] != game_pk]
+        fold_df = df[df["game_pk"] == game_pk]
+        model = train_classifier(
+            train_df, train_df["group"].tolist(), feature_columns=columns
+        )
+        y_true = fold_df["group"].tolist()
+        accuracies.append(accuracy_score(y_true, model.predict(fold_df[columns])))
+        baselines.append(accuracy_score(
+            y_true, [train_df["group"].value_counts().idxmax()] * len(y_true)
+        ))
+        _p, _r, f1, _s = precision_recall_fscore_support(
+            y_true, model.predict(fold_df[columns]), labels=["OFFSPEED"], zero_division=0
+        )
+        offspeed_f1.append(f1[0])
+        proba = model.predict_proba(fold_df[columns])
+        offspeed_auc.append(roc_auc_score(
+            (np.asarray(y_true) == "OFFSPEED").astype(int),
+            proba[:, list(model.classes_).index("OFFSPEED")],
+        ))
+    return {
+        "LOGO_정확도": float(np.mean(accuracies)),
+        "LOGO_기준선": float(np.mean(baselines)),
+        "LOGO_기준선대비": float(np.mean(accuracies) - np.mean(baselines)),
+        "LOGO_OFFSPEED_f1": float(np.mean(offspeed_f1)),
+        "LOGO_OFFSPEED_auc": float(np.mean(offspeed_auc)),
+        "LOGO_폴드별": " / ".join(f"{a:.2f}" for a in accuracies),
+    }
 
 
 def permutation_test(
@@ -166,18 +224,36 @@ def main() -> None:
     print(holdout_df["group"].value_counts().to_string())
     print()
 
+    all_df = pd.concat([train_df, holdout_df], ignore_index=True)
     results = {}
     importance_by_set = {}
     for name, columns in FEATURE_SETS.items():
+        missing = [c for c in columns if c not in train_df.columns]
+        if missing:
+            # v1 캐시로 만든 데이터셋에는 박스 컬럼이 없다. 죽지 말고 건너뛴다 —
+            # 나머지 집합의 비교는 그대로 유효하다.
+            print(f"[{name}] 건너뜀 — 데이터셋에 없는 컬럼: {missing}")
+            continue
         result, importances = evaluate(columns, train_df, holdout_df)
+        result.update(evaluate_logo(columns, all_df))
         results[name] = result
         importance_by_set[name] = importances
-        print(f"[{name}] 정확도 {result['정확도']:.3f} "
-              f"(기준선 대비 {result['기준선대비']:+.3f})  중요도비 {result['중요도비']:.2f}")
-        print(f"         OFFSPEED  p={result['OFFSPEED_precision']:.2f} "
+        print(f"[{name}] 홀드아웃 {result['정확도']:.3f} "
+              f"({result['기준선대비']:+.3f})  LOGO {result['LOGO_정확도']:.3f} "
+              f"({result['LOGO_기준선대비']:+.3f}, 폴드별 {result['LOGO_폴드별']})")
+        print(f"         중요도비 {result['중요도비']:.2f}   "
+              f"OFFSPEED p={result['OFFSPEED_precision']:.2f} "
               f"r={result['OFFSPEED_recall']:.2f} f1={result['OFFSPEED_f1']:.2f}")
+        print(f"         AUC  FASTBALL {result['FASTBALL_auc']:.3f} / "
+              f"BREAKING {result['BREAKING_auc']:.3f} / "
+              f"OFFSPEED {result['OFFSPEED_auc']:.3f}  "
+              f"(LOGO OFFSPEED {result['LOGO_OFFSPEED_auc']:.3f})", flush=True)
 
     table = pd.DataFrame(results).T
+    # .T가 문자열 컬럼(LOGO_폴드별) 때문에 전체를 object로 만든다 — 수치 컬럼만 되돌린다.
+    numeric = table.columns.drop("LOGO_폴드별")
+    table[numeric] = table[numeric].astype(float)
+
     os.makedirs(OUT_DIR, exist_ok=True)
     csv_path = os.path.join(OUT_DIR, "feature_ablation.csv")
     table.to_csv(csv_path)
@@ -185,8 +261,19 @@ def main() -> None:
     plot_comparison(table, png_path)
     print(f"\n저장: {csv_path}\n저장: {png_path}")
 
-    print("\n특징 중요도 (전체 집합):")
-    print(importance_by_set["전체(14)"].sort_values(ascending=False).to_string())
+    last_name = list(importance_by_set)[-1]   # 건너뛴 집합은 여기 없다
+    print(f"\n특징 중요도 ({last_name}):")
+    print(importance_by_set[last_name].sort_values(ascending=False).to_string())
+
+    # 판정. 소수 클래스는 정확도가 아니라 AUC로 본다 (TS-023).
+    base_auc = table.loc["기준(7)", "LOGO_OFFSPEED_auc"]
+    best_auc = table["LOGO_OFFSPEED_auc"].max()
+    best_name = table["LOGO_OFFSPEED_auc"].idxmax()
+    print(f"\n[판정] OFFSPEED LOGO AUC  기준(7) {base_auc:.3f} -> "
+          f"최고 {best_auc:.3f} ({best_name}), 차 {best_auc - base_auc:+.3f}")
+    if best_auc - base_auc < 0.03:
+        print("       0.03 미만 = 특징이 OFFSPEED에 정보를 넣지 못했다. "
+              "정확도가 올랐다면 다른 클래스에서 온 것이다.")
 
     if args.permutations:
         best = table["OFFSPEED_f1"].idxmax()
