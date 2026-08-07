@@ -276,7 +276,9 @@ def main() -> None:
               "정확도가 올랐다면 다른 클래스에서 온 것이다.")
 
     if args.permutations:
-        best = table["OFFSPEED_f1"].idxmax()
+        # 순열검정은 "채택할 모델의 성능이 우연인가"를 묻는다. OFFSPEED f1이 가장 높은
+        # 집합이 아니라 실제로 쓸 집합(정확도 최고)을 대상으로 해야 답이 맞는다.
+        best = table["정확도"].idxmax()
         print(f"\n순열검정 {args.permutations}회 — 대상: {best}", flush=True)
         scores, p_value = permutation_test(
             FEATURE_SETS[best], train_df, holdout_df,
