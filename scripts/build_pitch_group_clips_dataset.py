@@ -13,6 +13,7 @@ import argparse
 import json
 import os
 import sys
+import time
 from concurrent.futures import ThreadPoolExecutor
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -82,26 +83,45 @@ DEFAULT_WINDOW_END = 4.2
 USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"
 
 
-def fetch_clip(play_id: str) -> str | None:
-    """클립을 받아 로컬 경로를 돌려준다. 페이지에 mp4가 없으면 None."""
+def fetch_clip(play_id: str, attempts: int = 4) -> str | None:
+    """
+    클립을 받아 로컬 경로를 돌려준다. 페이지에 mp4가 없으면 None.
+
+    일시적 네트워크 오류는 재시도한다. 동시 다운로드를 걸면 Savant가 연결을 리셋하는데
+    (실측 `ConnectionResetError(54, 'Connection reset by peer')`), 재시도가 없으면 그
+    투구는 캐시에도 안 남고 '궤적 확보 실패'로 확정된다 — 두 시간 무인 실행에서
+    데이터가 조용히 깎인다. 확보율이 실제보다 낮게 나오면 선택 편향 측정도 오염된다.
+    """
     os.makedirs(CLIP_DIR, exist_ok=True)
     path = os.path.join(CLIP_DIR, f"{play_id}.mp4")
     if os.path.exists(path) and os.path.getsize(path) > 100_000:
         return path
 
     headers = {"User-Agent": USER_AGENT}
-    page = requests.get(savant_clip_page_url(play_id), headers=headers, timeout=60).text
-    url = extract_clip_url(page)
-    if url is None:
-        return None
+    last_error: Exception | None = None
+    for attempt in range(attempts):
+        if attempt:
+            time.sleep(2 ** attempt)   # 2, 4, 8초 — 리셋은 대개 부하성이라 물러섰다 온다
+        try:
+            page = requests.get(
+                savant_clip_page_url(play_id), headers=headers, timeout=60
+            ).text
+            url = extract_clip_url(page)
+            if url is None:
+                return None   # 페이지에 클립이 없는 것은 재시도해도 같다
 
-    response = requests.get(url, headers=headers, timeout=180)
-    response.raise_for_status()
-    tmp_path = f"{path}.tmp"
-    with open(tmp_path, "wb") as f:
-        f.write(response.content)
-    os.replace(tmp_path, path)  # 중단돼도 반쪽 파일이 남지 않도록 원자적 교체
-    return path
+            response = requests.get(url, headers=headers, timeout=180)
+            response.raise_for_status()
+            tmp_path = f"{path}.tmp"
+            with open(tmp_path, "wb") as f:
+                f.write(response.content)
+            os.replace(tmp_path, path)  # 중단돼도 반쪽 파일이 남지 않도록 원자적 교체
+            return path
+        except requests.RequestException as exc:
+            last_error = exc
+
+    print(f"  [다운로드 실패] {play_id}: {last_error}", flush=True)
+    return None
 
 
 def load_candidate_cache(cache_path: str) -> dict[str, list]:
@@ -182,7 +202,8 @@ def main() -> None:
                         help="처리 후 mp4를 지우지 않는다 (4경기 기준 약 5GB)")
     # Savant는 연결당 대역폭을 제한한다 — 실측 단일 연결 0.1MB/s, 6연결 0.52MB/s.
     # 직렬로는 클립당 30초라 1193구에 10시간이 걸린다.
-    parser.add_argument("--download-workers", type=int, default=6,
+    # 6연결은 40분쯤 돌면 Savant가 연결을 리셋하기 시작했다. 4로 낮추고 재시도를 함께 건다.
+    parser.add_argument("--download-workers", type=int, default=4,
                         help="동시 다운로드 연결 수")
     args = parser.parse_args()
 
