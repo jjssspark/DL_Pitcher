@@ -237,10 +237,20 @@ def _make_model_ref() -> list:
 def _make_scan_tasks() -> dict:
     return {}
 
+@st.cache_resource
+def _make_cv_tasks() -> dict:
+    return {}
+
+@st.cache_resource
+def _make_cv_model_ref() -> list:
+    return [None, None]  # [분류기, 공 감지기]
+
 _pose_tasks   = _make_pose_tasks()
 _bilstm_tasks = _make_bilstm_tasks()
 _model_ref    = _make_model_ref()
 _scan_tasks   = _make_scan_tasks()
+_cv_tasks     = _make_cv_tasks()
+_cv_model_ref = _make_cv_model_ref()
 _game_cache: dict = {}
 
 
@@ -575,6 +585,63 @@ def _start_ocr_check(video_path: str, check_time: float) -> str:
     return task_id
 
 
+# ══ CV 궤적 구종 판정 ═════════════════════════════════════════════
+# 위 실측 표시는 Statcast API에서 온다 — 정답이지만 API가 있어야만 나온다.
+# 아래 경로는 같은 값을 영상만으로 낸다. 범위는 FASTBALL vs BREAKING 2분류다
+# (OFFSPEED는 중계 궤적으로 안 갈린다 — ADR-0012).
+def _get_cv_models():
+    """분류기 + 공 감지기 지연 로드. 둘 다 무거워서 최초 판정 때 한 번만 올린다."""
+    if _cv_model_ref[0] is None:
+        from pitch_type_cv.group_classifier import load_classifier
+        from pitch_type_cv.live_classifier import TWO_CLASS_MODEL_PATH
+        _cv_model_ref[0] = load_classifier(TWO_CLASS_MODEL_PATH)
+    if _cv_model_ref[1] is None:
+        from ultralytics import YOLO
+        _cv_model_ref[1] = YOLO(os.path.join(ROOT, "models", "ball_broadcast_v1.pt"))
+    return _cv_model_ref[0], _cv_model_ref[1]
+
+
+def _run_cv_check_bg(task_id: str, video_path: str, pitch_time: float, pitch_idx: int) -> None:
+    """영상 궤적으로 구종 판정 (백그라운드). 실패는 실패로 남긴다."""
+    try:
+        from pitch_type_cv.live_classifier import classify_video_pitch
+        classifier, detector = _get_cv_models()
+        verdict = classify_video_pitch(classifier, detector, video_path, pitch_time)
+        _cv_tasks[task_id] = {
+            "status": "done", "pitch_idx": pitch_idx, "pitch_time": pitch_time,
+            "group": verdict.group, "confidence": verdict.confidence,
+            "probabilities": verdict.probabilities,
+            "n_points": verdict.n_points, "reason": verdict.reason,
+        }
+        print(f"[CV] idx={pitch_idx} t={pitch_time:.1f}s → "
+              f"{verdict.group or '판정불가(' + verdict.reason + ')'} "
+              f"conf={verdict.confidence:.2f} pts={verdict.n_points}")
+    except Exception as e:
+        print(f"[CV] ERROR idx={pitch_idx}: {e}")
+        _cv_tasks[task_id] = {
+            "status": "error", "pitch_idx": pitch_idx, "group": None,
+            "reason": "error", "error": str(e), "n_points": 0, "confidence": 0.0,
+        }
+
+
+def _start_cv_check(video_path: str, pitch_time: float, pitch_idx: int) -> str:
+    task_id = str(uuid.uuid4())[:8]
+    _cv_tasks[task_id] = {"status": "processing", "pitch_idx": pitch_idx}
+    threading.Thread(
+        target=_run_cv_check_bg, args=(task_id, video_path, pitch_time, pitch_idx), daemon=True
+    ).start()
+    return task_id
+
+
+def _statcast_to_two_class(pitch_type: str | None) -> str | None:
+    """Statcast 구종 코드 → 2분류 정답. OFFSPEED와 미매핑은 채점에서 뺀다."""
+    if pitch_type in FASTBALLS:
+        return "FASTBALL"
+    if pitch_type in BREAKING:
+        return "BREAKING"
+    return None
+
+
 @st.cache_resource
 def _get_video_server(directory: str) -> int:
     """로컬 비디오 파일을 HTTP로 serve. 포트 번호 반환."""
@@ -704,6 +771,11 @@ _DEFAULTS = {
     "video_pitch_data":      [],    # MLB 인덱스 기준 OCR 표시 데이터 (list, MLB idx로 확장)
     "_scan_raw_data":        [],    # 스캔 순서 기준 raw OCR 데이터 (scan idx → {type, speed})
     "_next_scan_idx":        0,     # 다음 처리할 스캔 타임스탬프 인덱스
+    "_cv_verdicts":          {},    # 투구 idx -> CV 판정 결과 (영상만으로 낸 실측)
+    "_cv_task_idx":          {},    # 투구 idx -> 진행 중 태스크 id (중복 실행 방지)
+    "_cv_hits":              0,     # API 정답 대비 CV 적중 수
+    "_cv_scored":            0,     # 채점된 수 (판정 성공 & 정답이 2분류인 것만)
+    "_cv_unavailable":       0,     # 궤적을 못 잡아 판정 불가한 수
     "_scan_task_id":         None,
     "_scan_status":          "idle",  # idle | scanning | done | error
     "_scan_version":         "",
@@ -852,6 +924,26 @@ pitches   = st.session_state.game_pitches
 meta      = st.session_state.game_meta
 c_idx     = st.session_state.current_pitch_idx
 loaded    = bool(pitches)
+
+# ── 완료된 CV 판정 수거 & 채점 ──
+# 백그라운드 스레드가 _cv_tasks에 넣은 결과를 세션 상태로 옮긴다. 채점은 여기서
+# 한 번만 한다 — 렌더 중에 세면 재렌더마다 중복 집계된다 (스트릭 로직이 같은 이유로
+# _streak_calc_idx를 둔다).
+for _cvi, _cvt in list(st.session_state._cv_task_idx.items()):
+    _cvr = _cv_tasks.get(_cvt)
+    if not _cvr or _cvr.get("status") == "processing":
+        continue
+    _truth = _statcast_to_two_class(pitches[_cvi]["pitch_type"]) if _cvi < len(pitches) else None
+    st.session_state._cv_verdicts[_cvi] = {**_cvr, "truth": _truth}
+    if _cvr.get("group") is None:
+        st.session_state._cv_unavailable += 1
+    elif _truth:
+        # 정답이 OFFSPEED면 채점에서 뺀다. 2분류 모델은 그 클래스를 낼 수 없어
+        # 무조건 오답이 되고, 그건 모델이 아니라 범위의 문제다 (ADR-0012).
+        st.session_state._cv_scored += 1
+        if _truth == _cvr["group"]:
+            st.session_state._cv_hits += 1
+    del st.session_state._cv_task_idx[_cvi]
 
 
 # ══ 사이드바 ══════════════════════════════════════════════════════
@@ -1411,6 +1503,84 @@ if loaded:
                     '<span style="color:#475569;font-size:.9rem">경기 로드 후 재생</span></div>',
                     unsafe_allow_html=True)
 
+            # ── 영상만으로 낸 구종 (CV 궤적 판정) ──
+            # 위 실측은 Statcast API에서 왔다. 아래는 API 없이 영상 궤적만으로 낸 값이라
+            # 둘을 나란히 두면 CV 적중률이 화면에서 바로 채점된다.
+            _cv_vd = st.session_state._cv_verdicts.get(_ocr_i)
+            _cv_running = _ocr_i in st.session_state._cv_task_idx
+
+            # 판정 발주: 방금 던진 구가 있고, 아직 결과도 진행 중인 것도 없을 때 한 번만.
+            _cv_path  = st.session_state.get("_local_video_path")
+            # 현재 재생 시각이 아니라 **스캔이 잡은 실제 투구 시각**으로 쏜다.
+            # 투구 인덱스는 영상 길이에 비례 매핑되므로(_target_idx), 인덱스가 넘어간
+            # 순간의 재생 시각에 공이 날아가고 있다는 보장이 없다. 오버레이가 뜬 시각은
+            # 실제로 투구가 있었던 시각이다.
+            _cv_now   = st.session_state.get("_vid_t")
+            _cv_times = st.session_state.get("video_pitch_times") or []
+            _cv_past  = [t for t in _cv_times if _cv_now is not None and t <= _cv_now]
+            _cv_vid_t = max(_cv_past) if _cv_past else None
+            if (prev and _ocr_i >= 0 and _cv_vd is None and not _cv_running
+                    and _cv_path and os.path.exists(_cv_path)
+                    and _cv_vid_t is not None):
+                _cv_tid = _start_cv_check(_cv_path, _cv_vid_t, _ocr_i)
+                st.session_state._cv_task_idx[_ocr_i] = _cv_tid
+                _cv_running = True
+
+            if _cv_vd:
+                _cv_group = _cv_vd.get("group")
+                if _cv_group:
+                    _cv_col  = "#60a5fa" if _cv_group == "FASTBALL" else "#c084fc"
+                    _cv_kor  = "속구 계열" if _cv_group == "FASTBALL" else "변화구 계열"
+                    _cv_conf = _cv_vd.get("confidence", 0.0)
+                    _cv_mark = ""
+                    if _cv_vd.get("truth"):
+                        _cv_ok = _cv_vd["truth"] == _cv_group
+                        _cv_mark = (f'<span style="font-size:.68rem;font-weight:700;margin-left:.35rem;'
+                                    f'color:{"#34d399" if _cv_ok else "#f87171"}">'
+                                    f'{"✓" if _cv_ok else "✗"}</span>')
+                    _cv_body = (
+                        f'<span style="color:{_cv_col};font-weight:800;font-size:.9rem">{_cv_kor}</span>'
+                        f'<span style="color:#64748b;font-size:.72rem;margin-left:.4rem">'
+                        f'{_cv_conf:.0%} · 궤적 {_cv_vd.get("n_points", 0)}점</span>'
+                        + _cv_mark
+                    )
+                else:
+                    # 궤적을 못 잡은 14%를 숨기지 않는다. 숨기면 앱 정확도가 실제보다 좋아 보인다.
+                    _cv_why = {"no_detections": "공 미감지", "no_trajectory": "궤적 없음",
+                               "too_few_points": "궤적 짧음", "error": "오류"}.get(
+                                   _cv_vd.get("reason", ""), _cv_vd.get("reason", ""))
+                    _cv_body = (f'<span style="color:#64748b;font-size:.82rem">판정 불가</span>'
+                                f'<span style="color:#475569;font-size:.7rem;margin-left:.35rem">{_cv_why}</span>')
+            elif _cv_running:
+                _cv_body = '<span style="color:#475569;font-size:.8rem">궤적 분석 중…</span>'
+            else:
+                _cv_body = '<span style="color:#334155;font-size:.8rem">대기</span>'
+
+            _cv_n, _cv_h = st.session_state._cv_scored, st.session_state._cv_hits
+            _cv_rate = (f'{_cv_h / _cv_n:.0%} ({_cv_h}/{_cv_n})' if _cv_n else '—')
+            # 이 패널은 검증을 통과하지 못했다. Savant 투구별 클립에서는 정확도 78.3%
+            # (LOGO 4폴드)인데, 전체 중계 영상에서는 판정률 32% / 정확도 58.8%로
+            # 최빈값 기준선 54.3%와 구분되지 않는다 (TS-025). 그 사실을 화면에 적는다 —
+            # 기준선 수준 숫자를 성능처럼 보여주는 것이 이 프로젝트에서 가장 피해야 할 일이다.
+            st.markdown(
+                f'<div style="margin-top:.45rem;padding:.5rem .65rem;border-radius:10px;'
+                f'background:rgba(8,14,26,.5);border:1px dashed rgba(148,163,184,.22)">'
+                f'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:.5rem">'
+                f'<span style="font-size:.62rem;font-weight:700;letter-spacing:.08em;'
+                f'text-transform:uppercase;color:#475569">영상만으로 · CV'
+                f'<span style="margin-left:.35rem;padding:.05rem .3rem;border-radius:4px;'
+                f'background:rgba(245,158,11,.14);color:#f59e0b;font-size:.58rem;'
+                f'letter-spacing:0">실험적</span></span>'
+                f'<span style="font-size:.62rem;color:#475569">이번 세션 {_cv_rate}</span>'
+                f'</div>'
+                f'<div style="margin-top:.2rem">{_cv_body}</div>'
+                f'<div style="margin-top:.3rem;font-size:.58rem;color:#3f4a5c;line-height:1.5">'
+                f'클립 단위 검증 78.3% · 전체 중계 영상 58.8%(기준선 54.7%)로 미검증 — '
+                f'판정률도 32%에 그친다'
+                f'</div>'
+                f'</div>',
+                unsafe_allow_html=True)
+
             # ── 다음 구종 예측 ──
             if True:
                 _bilstm_res = _bilstm_preds[c_idx] if c_idx < len(_bilstm_preds) else None
@@ -1543,6 +1713,12 @@ if loaded and c_idx > 0:
 _poll_stid = st.session_state.get("_scan_task_id")
 if _poll_stid and _scan_tasks.get(_poll_stid, {}).get("status") == "scanning":
     time.sleep(2.0)
+    st.rerun()
+
+# CV 판정 폴링 — 백그라운드 결과를 화면에 올리려면 재렌더가 필요하다.
+# 궤적 판정은 프레임 수십 장에 YOLO를 돌리므로 OCR보다 느리다. 간격을 길게 잡는다.
+if st.session_state.get("_cv_task_idx"):
+    time.sleep(1.5)
     st.rerun()
 
 # 포즈 감지 태스크 폴링 (실시간 폴백 사용 시)
