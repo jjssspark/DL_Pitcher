@@ -71,8 +71,22 @@
       vid.src = args.video_url;
       initialized = true;
 
+      // 진행 보고는 setInterval이 아니라 timeupdate로 몬다.
+      //
+      // 크롬은 탭이 백그라운드로 가면 setInterval을 1분에 한 번까지 늦춘다. 그런데
+      // 영상은 그대로 재생된다 — 멎는 건 타이머뿐이다. 그래서 사용자가 잠깐 다른
+      // 창을 보고 오면 영상만 흘러가고 타임라인은 그 자리에 멎어 있었다.
+      // 실측 로그: 같은 vid_t=42.446409가 정확히 120초 간격으로 두 번 올라왔고,
+      // 그 사이 영상은 42초에서 99초까지 나아가 있었다.
+      //
+      // timeupdate는 미디어 파이프라인이 직접 쏘는 이벤트라 이 스로틀을 받지 않는다.
+      // 재생 중 초당 4회쯤 오고, 보고 간격 제한은 아래 sendState가 그대로 건다.
+      vid.addEventListener("timeupdate", function () { sendState(false); });
+
+      // 정지 중에는 timeupdate가 안 온다. 되감기나 외부 조작을 놓치지 않을 만큼만
+      // 느리게 도는 보조 타이머를 남긴다 — 스로틀을 맞아도 손해가 없는 주기다.
       if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(sendState, 250);
+      pollInterval = setInterval(sendState, 1000);
 
       // 재생/정지·탐색은 사용자가 방금 한 조작이라 다음 주기를 기다리지 않고 올린다.
       ["play", "pause", "seeked", "ended"].forEach(function (name) {

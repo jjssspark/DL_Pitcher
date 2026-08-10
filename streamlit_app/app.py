@@ -590,33 +590,10 @@ def _start_pose_check(video_path: str, check_time: float) -> str:
     return task_id
 
 
-def _run_ocr_check_bg(task_id: str, video_path: str, check_time: float) -> None:
-    """방송 오버레이 OCR 실시간 투구 감지 (백그라운드)"""
-    try:
-        from pose_detector import ocr_check_pitch_overlay
-        is_pitch, pitch_type, speed, pitch_count = ocr_check_pitch_overlay(video_path, check_time)
-        _pose_tasks[task_id] = {
-            "status": "done", "is_pitch": is_pitch,
-            "pitch_type": pitch_type, "speed": speed,
-            "pitch_count": pitch_count,
-            "check_time": check_time,
-        }
-        if is_pitch:
-            print(f"[OCR실시간] t={check_time:.1f}s → {pitch_type} {speed}mph P:{pitch_count}")
-    except Exception as e:
-        _pose_tasks[task_id] = {
-            "status": "error", "is_pitch": False,
-            "check_time": check_time, "error": str(e),
-        }
-
-
-def _start_ocr_check(video_path: str, check_time: float) -> str:
-    task_id = str(uuid.uuid4())[:8]
-    _pose_tasks[task_id] = {"status": "processing", "check_time": check_time}
-    threading.Thread(
-        target=_run_ocr_check_bg, args=(task_id, video_path, check_time), daemon=True
-    ).start()
-    return task_id
+# 재생 중 오버레이를 OCR 하던 _start_ocr_check / _run_ocr_check_bg 는 제거했다 (TS-031).
+# 오버레이가 투구보다 늦게 뜨는 구조라 지연을 못 줄인다. pose_detector의
+# ocr_check_pitch_overlay 자체는 남아 있다 — 오프라인 앵커 생성이 그걸 쓴다
+# (scripts/build_timeline_anchors.py).
 
 
 # ══ CV 궤적 구종 판정 ═════════════════════════════════════════════
@@ -888,7 +865,10 @@ _DEFAULTS = {
     "is_playing":            False,
     "video_synced":          False,
     "video_pitch_times":     [],    # 스캔 타임스탬프: [video_sec, ...]
-    "video_pitch_data":      [],    # MLB 인덱스 기준 OCR 표시 데이터 (list, MLB idx로 확장)
+    "video_pitch_data":      [],    # 영상에서 읽은 구종·구속 (list, MLB idx로 확장).
+                                    # TS-031 이후 채우는 곳이 없어 항상 비어 있고,
+                                    # 표시는 Statcast 값으로 폴백한다. 오프라인 스캔이
+                                    # 투구 시각을 전부 확보하면 여기를 다시 채운다.
     "_scan_raw_data":        [],    # 스캔 순서 기준 raw OCR 데이터 (scan idx → {type, speed})
     "_next_scan_idx":        0,     # 다음 처리할 스캔 타임스탬프 인덱스
     "cv_enabled":            False, # CV 궤적 판정 사용 여부 (사이드바 토글, 기본 꺼짐)
@@ -1230,41 +1210,12 @@ _OCR_TO_CODE = {
     "Cutter": "FC", "Splitter": "FS", "Knuckleball": "KN",
 }
 
-_pose_tid = st.session_state.get("_pose_task_id")
-if _pose_tid and _pose_tid in _pose_tasks:
-    _ptask = _pose_tasks[_pose_tid]
-    if _ptask["status"] in ("done", "error"):
-        _ocr_check_t  = _ptask.get("check_time", -99.0)
-        _scan_last_t  = st.session_state.get("_last_pitch_video_time", -99.0)
-        _scan_covered = _scan_last_t > 0 and _ocr_check_t <= _scan_last_t + 8.0
-        if _ptask.get("is_pitch") and loaded and not _scan_covered:
-            _ocr_type   = _ptask.get("pitch_type")
-            _ocr_speed  = _ptask.get("speed")
-            _ocr_pcount = _ptask.get("pitch_count")
-
-            # 실시간 OCR은 무조건 순차 전진 — P:N OCR 오독 시 큰 점프 방지
-            _last_mlb = st.session_state.get("_last_ocr_mlb_idx", -1)
-            _best_idx = min(_last_mlb + 1, len(pitches) - 1)
-            _method   = "순차"
-
-            _vpd = list(st.session_state.get("video_pitch_data", []))
-            while len(_vpd) <= _best_idx:
-                _vpd.append({})
-            _vpd[_best_idx] = {"pitch_type": _ocr_type, "speed": _ocr_speed}
-            _new_cidx = min(_best_idx + 1, len(pitches) - 1)
-            st.session_state.video_pitch_data        = _vpd
-            st.session_state.current_pitch_idx       = _new_cidx
-            st.session_state._last_ocr_mlb_idx       = _best_idx
-            st.session_state._last_pitch_video_time  = _ptask["check_time"]
-            st.session_state.video_synced            = True
-            st.session_state._sync_activated         = True
-            if pitches[_new_cidx]["inning"] >= 6:
-                st.session_state._sixth_inning_alert = True
-            print(f"[싱크] MLB #{_best_idx+1} 확정 → c_idx={_new_cidx} ({_ocr_type} {_ocr_speed}mph) [{_method}]")
-
-        del _pose_tasks[_pose_tid]
-        st.session_state._pose_task_id = None
-        st.rerun()
+# 실시간 OCR 결과로 인덱스를 정하던 블록을 제거했다 (TS-031). 발주 쪽 주석 참고.
+#
+# 이 블록은 OCR이 "투구다"라고 하면 영상 시각과 무관하게 current_pitch_idx를
+# 직전+1로 밀었다. 여기서 읽은 구종·구속을 video_pitch_data[추정 인덱스]에 넣어
+# 화면에도 띄웠는데, 인덱스가 추정값이라 엉뚱한 투구에 다른 구종이 붙을 수 있었다.
+# 지금은 그 자리를 Statcast 값이 채운다(아래 _display_code 폴백).
 
 # ══ 메인 레이아웃 ═════════════════════════════════════════════════
 if loaded:
@@ -1352,20 +1303,18 @@ if loaded:
                         st.session_state._sixth_inning_alert = True
                     st.rerun()
 
-            # ── 실시간 OCR 투구 감지 (항상 작동 — 사전 스캔 병행) ──
-            # _vid_t 기준으로 로컬 파일 프레임 직접 OCR → P: 증가 감지
-            _ocr_vid_t = _current_video_time if _current_video_time is not None else _vid_t
-            if (_ocr_vid_t is not None and loaded
-                    and _local_path and os.path.exists(_local_path)):
-                _last_check  = st.session_state.get("_pose_last_check_time", -99.0)
-                _last_pitch  = st.session_state.get("_last_pitch_video_time", -30.0)
-                _no_task     = not bool(st.session_state.get("_pose_task_id"))
-                _check_due   = (_ocr_vid_t - _last_check) >= 0.5
-                _cooldown_ok = (_ocr_vid_t - _last_pitch) >= 8.0
-                if _check_due and _cooldown_ok and _no_task:
-                    _new_tid = _start_ocr_check(_local_path, _ocr_vid_t)
-                    st.session_state._pose_task_id         = _new_tid
-                    st.session_state._pose_last_check_time = _ocr_vid_t
+            # 실시간 OCR 투구 감지는 없앴다 (TS-031).
+            #
+            # 방송 오버레이는 공이 던져진 **뒤에** 뜬다. 구속 표시가 나타나는 시점이
+            # 투구 +2.8~4.2초(ADR-0010 스캔창)이고, 여기에 검사 주기 0.5초와 OCR 1회
+            # 1.14초가 더 붙어 아무리 빨라도 +4.4초다. 코드를 최적화해서 줄일 수 있는
+            # 지연이 아니다 — 그 시점까지 영상에 정보가 존재하지 않는다.
+            #
+            # 게다가 그 결과로 인덱스를 정할 때 영상 시각을 보지 않고 무조건 직전+1을
+            # 썼다. 앵커 보간(영상 시각 기준, 지연 0)과 드라이버가 둘이 되어 결과가
+            # 둘 중 큰 쪽으로 정해졌고, 어느 쪽이 이길지 정해져 있지 않아 계속 어긋났다.
+            #
+            # 이제 인덱스는 위의 index_at_time() 하나가 정한다.
         elif _vsrc:
             _current_video_time = None
             st.video(_vsrc, autoplay=True, muted=True)
@@ -1385,6 +1334,8 @@ if loaded:
 
             _local_ready = bool(st.session_state.get("_local_video_path"))
 
+            # TS-031 이후 재생 중 감지가 없으므로 _pose_task_id는 항상 비어 있다.
+            # 아래 분기는 남겨둔다 — 오프라인 스캔이 붙으면 다시 쓰인다.
             _pose_active = bool(st.session_state.get("_pose_task_id"))
             _scan_st_note = st.session_state.get("_scan_status", "idle")
             if not _local_ready:
@@ -1392,7 +1343,7 @@ if loaded:
             elif _scan_st_note == "scanning":
                 _sync_note = "영상 분석 중…"
             elif _scan_st_note == "done":
-                _sync_note = "싱크 준비 완료 — 재생하면 자동 감지"
+                _sync_note = "싱크 준비 완료 — 재생 시각에 맞춰 자동 진행"
             elif _pose_active:
                 _sync_note = "투구 모션 감지 중…"
             else:
