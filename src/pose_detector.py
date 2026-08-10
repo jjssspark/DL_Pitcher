@@ -246,10 +246,15 @@ def scan_pitch_overlays(
 def ocr_check_pitch_overlay(
     video_path: str,
     check_time: float,
-) -> tuple[bool, str | None, int | None]:
+    read_counter: bool = False,
+) -> tuple[bool, str | None, int | None, int | None]:
     """
-    단일 프레임 OCR — 방송 오버레이 실시간 투구 감지.
-    Returns: (is_pitch, pitch_type_name, speed_mph)
+    단일 프레임 OCR — 방송 오버레이 투구 감지.
+    Returns: (is_pitch, pitch_type_name, speed_mph, pitch_count)
+
+    read_counter=True면 투수 투구수(P:N)까지 읽는다. 기본은 끔 — 실측으로 이 판독이
+    한 번에 4.7~9.7초 걸려(감지 자체는 2.4초) 재생 중 호출하면 감지 주기가 그만큼
+    벌어진다. 오프라인 사전 스캔처럼 시간을 쓸 수 있는 경로에서만 켠다.
     """
     try:
         import pytesseract
@@ -342,30 +347,86 @@ def ocr_check_pitch_overlay(
             pitch_type = PITCH_MAP[kw]
             break
 
-    # P:N 카운터 읽기 — MPH 이후 2~4초 뒤 프레임에서 P:N 출현
-    pitch_count = None
-    for _ahead in [2.0, 3.0, 1.5, 4.0]:
-        _cap2 = cv2.VideoCapture(video_path)
-        _cap2.set(cv2.CAP_PROP_POS_FRAMES, int((check_time + _ahead) * fps))
-        _ret2, _fr2 = _cap2.read()
-        _cap2.release()
-        if not _ret2:
-            continue
-        _h2, _w2 = _fr2.shape[:2]
-        _sr2 = _fr2[int(_h2 * 0.769):int(_h2 * 0.800), int(_w2 * 0.875):_w2]
-        _gr2 = cv2.cvtColor(_sr2, cv2.COLOR_BGR2GRAY)
-        _big2 = cv2.resize(_gr2, (_gr2.shape[1] * 6, _gr2.shape[0] * 6), interpolation=cv2.INTER_CUBIC)
-        _, _b2 = cv2.threshold(_big2, 100, 255, cv2.THRESH_BINARY)
-        try:
-            _raw2 = pytesseract.image_to_string(_b2, config="--psm 7 --oem 3").upper().strip()
-        except Exception:
-            _raw2 = ""
-        _pm = _re.search(r'P\s*[;:]\s*(\d+)', _raw2)
-        if _pm:
-            pitch_count = int(_pm.group(1))
-            break
-
+    pitch_count = _read_pitch_counter(video_path, check_time, fps) if read_counter else None
     return True, pitch_type, speed, pitch_count
+
+
+# 스코어버그의 투수 투구수(P:N)를 읽는다. 이 값이 있으면 "지금 몇 번째 투구인가"를
+# 절대값으로 알 수 있어 타임라인을 실제 중계에 맞출 수 있다.
+#
+# 이전 구현은 실측 판독률이 0%였다. 원인이 둘이었다.
+#
+#   (1) 시점 — MPH 이후 1.5~4.0초만 훑었는데 그 구간엔 아직 구속이 떠 있다.
+#       스코어버그는 두 상태를 오간다: 투구 직후 "FLAHERTY 79MPH",
+#       그다음 "FLAHERTY P: 6". 실측으로 P:N은 +4~+12초에 나온다.
+#   (2) 정규식 — r'P\s*[;:]\s*(\d+)' 가 콜론을 요구했는데 OCR은 이 폰트를
+#       'P- 6', 'P. 15', 'PR: 16'으로 읽는다. 그래서 전부 버려졌다.
+#
+# 한 프레임만으로는 여전히 못 믿는다 — 임계값별로 [25,29] [16,18]처럼 갈렸다.
+# P:N은 투구 사이 내내 고정돼 있으므로 여러 프레임 x 여러 임계값의 표를 모아
+# 다수결한다. 표가 갈리면 None을 돌려준다. 틀린 앵커는 없느니만 못하다.
+#
+# 남은 오독 양상 하나를 호출측이 알아야 한다: 크롭 아래에 타자 번호 행
+# ("2. SOTO")이 있어 가끔 작은 수가 잡힌다. 실측에서 오독은 전부 감소 방향이었다
+# (16 -> 3, 16 -> 2). 같은 투수의 P:N은 줄지 않으므로 호출측에서 단조성으로 거른다.
+_PN_OFFSETS = (4.5, 6.0, 7.5, 9.0, 10.5)
+_PN_THRESHOLDS = (90, 110, 130, 150, 170)
+_PN_MIN_VOTES = 2
+
+
+def _read_pitch_counter(video_path: str, check_time: float, fps: float) -> int | None:
+    """투구 직후 구간에서 P:N을 여러 프레임 다수결로 읽는다. 확신 없으면 None."""
+    try:
+        import pytesseract
+        import re as _re
+    except ImportError:
+        return None
+
+    from collections import Counter
+
+    pattern = _re.compile(r'P[^0-9]{0,3}(\d{1,3})')
+    config = "--psm 7 --oem 3 -c tessedit_char_whitelist=P:0123456789"
+
+    cap = cv2.VideoCapture(video_path)      # 오프셋마다 열지 않고 한 번만 연다
+    if not cap.isOpened():
+        return None
+
+    votes: list[int] = []
+    try:
+        for offset in _PN_OFFSETS:
+            # 이미 같은 값이 두 표 모였으면 더 읽지 않는다. 프레임 5개 x 임계값 5개를
+            # 다 돌면 한 번에 4.7초(최대 15초)까지 걸려 실시간 감지가 오히려 막힌다.
+            if votes and Counter(votes).most_common(1)[0][1] >= _PN_MIN_VOTES:
+                break
+            cap.set(cv2.CAP_PROP_POS_FRAMES, int((check_time + offset) * fps))
+            ok, frame = cap.read()
+            if not ok:
+                continue
+            h, w = frame.shape[:2]
+            region = frame[int(h * 0.766):int(h * 0.803), int(w * 0.875):w]
+            gray = cv2.cvtColor(region, cv2.COLOR_BGR2GRAY)
+            big = cv2.resize(gray, (gray.shape[1] * 6, gray.shape[0] * 6),
+                             interpolation=cv2.INTER_CUBIC)
+            for thr in _PN_THRESHOLDS:
+                _, binary = cv2.threshold(big, thr, 255, cv2.THRESH_BINARY)
+                try:
+                    text = pytesseract.image_to_string(binary, config=config).upper().strip()
+                except Exception:
+                    continue
+                if "MPH" in text:      # 아직 구속 표시 상태 — 카운터가 아니다
+                    continue
+                found = pattern.search(text.replace("\n", " "))
+                if found:
+                    value = int(found.group(1))
+                    if 1 <= value <= 200:
+                        votes.append(value)
+    finally:
+        cap.release()
+
+    if not votes:
+        return None
+    top, count = Counter(votes).most_common(1)[0]
+    return top if count >= _PN_MIN_VOTES else None
 
 
 def scan_video_pitches(

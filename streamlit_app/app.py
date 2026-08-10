@@ -198,6 +198,40 @@ TEAM_COLORS = {"NYY": "#0C2340", "LAD": "#005A9C"}  # 고정 데모 게임은 �
 TEAM_ACCENTS = {"NYY": "#8aa9d6", "LAD": "#4d9fe0"}
 FIXED_DEMO_VIDEO_DURATION_SEC = 8231  # 고정 데모 YouTube 영상 총 길이(초)
 
+# ── 타임라인 앵커 ────────────────────────────────────────────────
+# 영상 길이를 투구 수로 균등 분할하면 25.72초에 한 칸씩 넘어간다. 그런데 실제 중계의
+# 투구 간격은 광고·리플레이·타자 교체 때문에 12초에서 626초까지 널뛴다. 균등 가정으로는
+# 구조적으로 어긋나고 화면에는 "타임라인이 공 한 개 느리다"로 보인다 (TS-007, TS-008).
+#
+# 방송 스코어버그의 투수 투구수(P:N)를 읽어둔 지점을 앵커로 삼고 사이를 보간한다.
+# 앵커 파일이 없으면 빈 목록이 되어 기존 균등 분할 그대로 동작한다.
+from timeline_anchor import index_at_time, resolve_anchors, time_at_index  # noqa: E402
+
+TIMELINE_COUNTER_PATH = os.path.join(ROOT, "streamlit_app", "fixed_demo_anchors.json")
+
+
+@st.cache_data(show_spinner=False)
+def _load_timeline_counters() -> list[tuple[float, int | None]]:
+    """사전에 읽어둔 (영상 시각, P:N) 관측. 파일이 없으면 빈 목록."""
+    if not os.path.exists(TIMELINE_COUNTER_PATH):
+        return []
+    try:
+        rows = json.load(open(TIMELINE_COUNTER_PATH))
+    except Exception:
+        return []
+    return [(float(r["t"]), r.get("counter")) for r in rows if "t" in r]
+
+
+def _timeline_anchors(pitches: list[dict]) -> list[tuple[float, int]]:
+    """관측을 앵커로 푼다. 경기가 바뀌면 결과도 달라지므로 투구 수로 캐시를 가른다."""
+    key = len(pitches)
+    cache = st.session_state.setdefault("_anchor_cache", {})
+    if key not in cache:
+        cache[key] = resolve_anchors(
+            _load_timeline_counters(), pitches, FIXED_DEMO_VIDEO_DURATION_SEC
+        )
+    return cache[key]
+
 # ══ 구종 메타 ══════════════════════════════════════════════════════
 PITCH_META = {
     "FF": {"name": "포심 패스트볼", "color": "#ef4444", "emoji": "🔴"},
@@ -1307,8 +1341,10 @@ if loaded:
 
             print(f"[SYNC] vid_t={_vid_t} pl={_vid_pl} loaded={loaded} lpath={bool(_local_path)}")
             if _vid_t is not None and loaded and _vid_pl:
-                _target_idx  = int((_vid_t / FIXED_DEMO_VIDEO_DURATION_SEC) * len(pitches))
-                _new_cidx_ts = max(0, min(_target_idx, len(pitches) - 1))
+                _new_cidx_ts = index_at_time(
+                    _vid_t, _timeline_anchors(pitches),
+                    FIXED_DEMO_VIDEO_DURATION_SEC, len(pitches),
+                )
                 if _new_cidx_ts > st.session_state.get("current_pitch_idx", 0):
                     st.session_state.current_pitch_idx = _new_cidx_ts
                     st.session_state._sync_activated    = True
@@ -1377,10 +1413,13 @@ if loaded:
                 idx = max(0, min(idx, len(pitches) - 1))
                 st.session_state.current_pitch_idx = idx
                 st.session_state.video_synced = True
-                # 영상도 같이 옮긴다. 인덱스만 바꾸면 시간 비례 자동 싱크가 영상 시각에
-                # 맞춰 인덱스를 도로 끌고 간다.
+                # 영상도 같이 옮긴다. 인덱스만 바꾸면 자동 싱크가 영상 시각에 맞춰
+                # 인덱스를 도로 끌고 간다. 표시와 같은 매핑을 써야 둘이 안 어긋난다.
                 if pitches:
-                    st.session_state.seek_to = (idx / len(pitches)) * FIXED_DEMO_VIDEO_DURATION_SEC
+                    st.session_state.seek_to = time_at_index(
+                        idx, _timeline_anchors(pitches),
+                        FIXED_DEMO_VIDEO_DURATION_SEC, len(pitches),
+                    )
 
             # 슬라이더 손잡이를 현재 인덱스에 맞춘다. 위젯을 만들기 **전에** 키를 쓰는 것이
             # 정해진 방법이다 — 콜백 안에서 자기 위젯 키를 건드리면 on_change와 얽혀
