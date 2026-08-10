@@ -59,6 +59,16 @@ TRAINING_END_FRAME = 21
 CHAIN_MAX_JUMP_PX = 60
 CHAIN_MIN_TOTAL_MOVE_PX = 30
 
+# 프레임 샘플링 간격. build_pitch_group_clips_dataset.py의 DETECT_FPS와 같아야 한다.
+#
+# 이걸 안 넘겨서 앱이 59.94fps 영상의 모든 프레임을 썼고, 학습은 매 2번째 프레임을
+# 썼다. 프레임 간격이 2배 다르면 프레임 기준 측정값이 통째로 어긋난다 — 속도는
+# 1/2, 가속도는 1/4이 된다. 실측도 정확히 그랬다(속도 0.51배, 가속도 0.27배).
+#
+# 하필 가속도가 모델의 1위 특징(중요도 0.398)이라, 낙차가 안 보여 전부 직구로
+# 붕괴했다. 앱 39개 중 37개를 FASTBALL로 찍고 BREAKING을 하나도 못 맞혔다.
+DETECT_TARGET_FPS = 30.0
+
 
 @dataclass(frozen=True)
 class PitchVerdict:
@@ -171,6 +181,7 @@ def classify_video_pitch(
         video_path, timestamp_sec, detector,
         lookback_start_sec=lookback_start_sec,
         lookback_end_sec=lookback_end_sec,
+        target_fps=DETECT_TARGET_FPS,
         imgsz=imgsz, conf=conf,
     )
     if not candidates:

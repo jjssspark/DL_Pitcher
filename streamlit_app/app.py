@@ -644,22 +644,108 @@ def _statcast_to_two_class(pitch_type: str | None) -> str | None:
 
 @st.cache_resource
 def _get_video_server(directory: str) -> int:
-    """로컬 비디오 파일을 HTTP로 serve. 포트 번호 반환."""
-    import http.server, socketserver
+    """
+    로컬 비디오 파일을 HTTP로 serve. 포트 번호 반환.
+
+    Range 요청을 직접 구현한다. SimpleHTTPRequestHandler는 Range를 처리하지 않는데
+    Accept-Ranges 헤더만 붙어 있어서, 브라우저가 탐색 가능하다고 믿고 Range를 보내면
+    서버가 그걸 무시하고 파일 전체를 200으로 돌려줬다. 1.1GB 데모 영상에서 재생이
+    0:00에 멈춰 있던 원인이다. 헤더가 없었으면 브라우저가 순차 다운로드로 폴백했을
+    텐데, 있다고 광고하니 되지도 않는 Range 재생을 시도했다.
+
+    서버도 ThreadingTCPServer로 바꾼다. 단일 스레드로는 영상 요청 하나가 커넥션을
+    붙잡고 있는 동안 나머지가 전부 대기한다 — 브라우저는 영상에 커넥션을 여럿 연다.
+    """
+    import http.server, re, shutil, socketserver
 
     class _Handler(http.server.SimpleHTTPRequestHandler):
+        # HTTP/1.0으로는 Chrome 미디어 스택이 영상을 못 연다. fetch()로는 206과 바이트가
+        # 정상적으로 오는데 <video>는 readyState 0에서 멈춰 있었다 — 미디어 재생은
+        # 바이트 레인지 탐색에 지속 연결을 요구한다. Content-Length는 두 경로 모두에서
+        # 반드시 나가므로 1.1로 올려도 프레이밍이 깨지지 않는다.
+        protocol_version = "HTTP/1.1"
+
         def __init__(self, *args, **kwargs):
             super().__init__(*args, directory=directory, **kwargs)
+
         def end_headers(self):
             self.send_header("Access-Control-Allow-Origin", "*")
             self.send_header("Accept-Ranges", "bytes")
+            # 교차 출처에서는 이 둘이 기본으로 JS에 노출되지 않는다.
+            self.send_header("Access-Control-Expose-Headers",
+                             "Content-Range, Accept-Ranges, Content-Length")
             super().end_headers()
+
+        def send_head(self):
+            self._range_remaining = None
+            range_header = self.headers.get("Range")
+            path = self.translate_path(self.path)
+            if not range_header or os.path.isdir(path):
+                return super().send_head()
+
+            matched = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+            if not matched:
+                return super().send_head()   # 형식을 모르면 전체를 준다
+
+            try:
+                stream = open(path, "rb")
+            except OSError:
+                self.send_error(404, "File not found")
+                return None
+
+            size = os.fstat(stream.fileno()).st_size
+            start_raw, end_raw = matched.groups()
+            if start_raw == "":
+                # bytes=-N : 마지막 N바이트
+                if end_raw == "":
+                    stream.close()
+                    self.send_error(400, "Bad Range")
+                    return None
+                length = min(int(end_raw), size)
+                start, end = size - length, size - 1
+            else:
+                start = int(start_raw)
+                end = min(int(end_raw), size - 1) if end_raw else size - 1
+
+            if start >= size or start > end:
+                stream.close()
+                self.send_response(416)
+                self.send_header("Content-Range", f"bytes */{size}")
+                self.end_headers()
+                return None
+
+            self.send_response(206)
+            self.send_header("Content-Type", self.guess_type(path))
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+            self.send_header("Content-Length", str(end - start + 1))
+            self.end_headers()
+            stream.seek(start)
+            self._range_remaining = end - start + 1
+            return stream
+
+        def copyfile(self, source, outputfile):
+            remaining = self._range_remaining
+            if remaining is None:
+                shutil.copyfileobj(source, outputfile)
+                return
+            # 요청받은 구간만 보낸다. 그냥 copyfileobj를 부르면 seek 이후 전부가 나간다.
+            while remaining > 0:
+                chunk = source.read(min(64 * 1024, remaining))
+                if not chunk:
+                    break
+                outputfile.write(chunk)
+                remaining -= len(chunk)
+
         def log_message(self, *args):
             pass
 
+    class _Server(socketserver.ThreadingTCPServer):
+        daemon_threads = True
+        allow_reuse_address = True
+
     for port in range(8510, 8530):
         try:
-            server = socketserver.TCPServer(("", port), _Handler)
+            server = _Server(("", port), _Handler)
             threading.Thread(target=server.serve_forever, daemon=True).start()
             return port
         except OSError:
@@ -771,6 +857,7 @@ _DEFAULTS = {
     "video_pitch_data":      [],    # MLB 인덱스 기준 OCR 표시 데이터 (list, MLB idx로 확장)
     "_scan_raw_data":        [],    # 스캔 순서 기준 raw OCR 데이터 (scan idx → {type, speed})
     "_next_scan_idx":        0,     # 다음 처리할 스캔 타임스탬프 인덱스
+    "cv_enabled":            False, # CV 궤적 판정 사용 여부 (사이드바 토글, 기본 꺼짐)
     "_cv_verdicts":          {},    # 투구 idx -> CV 판정 결과 (영상만으로 낸 실측)
     "_cv_task_idx":          {},    # 투구 idx -> 진행 중 태스크 id (중복 실행 방지)
     "_cv_hits":              0,     # API 정답 대비 CV 적중 수
@@ -931,7 +1018,13 @@ loaded    = bool(pitches)
 # _streak_calc_idx를 둔다).
 for _cvi, _cvt in list(st.session_state._cv_task_idx.items()):
     _cvr = _cv_tasks.get(_cvt)
-    if not _cvr or _cvr.get("status") == "processing":
+    if _cvr is None:
+        # 태스크 딕셔너리가 사라진 경우(앱 재시작, cache_resource 해제). 그냥 두면
+        # 이 항목이 영원히 안 지워지고 아래 폴링이 1.5초마다 재실행을 무한히 걸어
+        # 버튼 클릭이 전부 재렌더에 묻힌다.
+        del st.session_state._cv_task_idx[_cvi]
+        continue
+    if _cvr.get("status") == "processing":
         continue
     _truth = _statcast_to_two_class(pitches[_cvi]["pitch_type"]) if _cvi < len(pitches) else None
     st.session_state._cv_verdicts[_cvi] = {**_cvr, "truth": _truth}
@@ -954,6 +1047,18 @@ with st.sidebar:
         '-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">⚾ PitchIQ</div>'
         '<div style="font-size:.78rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
         '</div>', unsafe_allow_html=True)
+
+    st.markdown('<div class="stitch-divider"></div>', unsafe_allow_html=True)
+
+    # 프레임 샘플링을 학습과 맞춘 뒤(TS-028) 앱 정확도가 0.410 -> 0.767로 올라
+    # 실험실 수치(0.783)와 같아졌다. 다만 투구마다 YOLO를 돌리므로 재생이 무거워질 수
+    # 있어 기본은 꺼둔다 — 켜고 끄는 판단은 사용자에게 맡긴다.
+    st.checkbox(
+        "CV 궤적 판정",
+        key="cv_enabled",
+        help="Statcast 없이 영상 궤적만으로 속구/변화구를 판정한다. 학습에 쓰지 않은 "
+             "경기에서 정확도 76.7%(기준선 58.1%). 투구마다 YOLO를 돌려 재생이 무거워질 수 있다.",
+    )
 
     st.markdown('<div class="stitch-divider"></div>', unsafe_allow_html=True)
 
@@ -1262,24 +1367,42 @@ if loaded:
 
             # 슬라이더 (투구 타임라인)
             st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
-            sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0), c_idx,
-                            label_visibility="collapsed")
-            if sel != c_idx:
-                st.session_state.current_pitch_idx = sel
+            # 이동은 전부 on_click/on_change 콜백으로 처리한다.
+            #
+            # st.button()의 반환값으로 처리하면 안 된다. 이 앱은 영상 재생 중 여러
+            # 폴링 루프가 st.rerun()을 계속 걸어서, 클릭이 처리되기 전에 다음 재실행에
+            # 버려진다 — 실측으로 '다음 투구'를 눌러도 st.button()이 True를 돌려준 적이
+            # 한 번도 없었다. 콜백은 위젯 이벤트를 처리하는 시점에 실행되므로 안 밀린다.
+            def _goto_pitch_cb(idx: int) -> None:
+                idx = max(0, min(idx, len(pitches) - 1))
+                st.session_state.current_pitch_idx = idx
                 st.session_state.video_synced = True
+                # 영상도 같이 옮긴다. 인덱스만 바꾸면 시간 비례 자동 싱크가 영상 시각에
+                # 맞춰 인덱스를 도로 끌고 간다.
+                if pitches:
+                    st.session_state.seek_to = (idx / len(pitches)) * FIXED_DEMO_VIDEO_DURATION_SEC
+
+            # 슬라이더 손잡이를 현재 인덱스에 맞춘다. 위젯을 만들기 **전에** 키를 쓰는 것이
+            # 정해진 방법이다 — 콜백 안에서 자기 위젯 키를 건드리면 on_change와 얽혀
+            # 방금 누른 값이 되돌아온다(실측: 버튼을 눌러도 seek_to가 0.0으로 잡혔다).
+            if st.session_state.get("pitch_slider") != c_idx:
+                st.session_state.pitch_slider = c_idx
+
+            sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0),
+                            key="pitch_slider", label_visibility="collapsed")
+            if sel != c_idx:                     # 사용자가 직접 끈 경우
+                _goto_pitch_cb(sel)
                 st.rerun()
 
             _bp, _bn = st.columns(2)
             with _bp:
-                if st.button("◀ 이전 투구", use_container_width=True, disabled=(c_idx <= 0)):
-                    st.session_state.current_pitch_idx = c_idx - 1
-                    st.session_state.video_synced = True
-                    st.rerun()
+                st.button("◀ 이전 투구", use_container_width=True,
+                          disabled=(c_idx <= 0), key="btn_prev",
+                          on_click=_goto_pitch_cb, args=(c_idx - 1,))
             with _bn:
-                if st.button("다음 투구 ▶", use_container_width=True, disabled=(c_idx >= len(pitches) - 1)):
-                    st.session_state.current_pitch_idx = c_idx + 1
-                    st.session_state.video_synced = True
-                    st.rerun()
+                st.button("다음 투구 ▶", use_container_width=True,
+                          disabled=(c_idx >= len(pitches) - 1), key="btn_next",
+                          on_click=_goto_pitch_cb, args=(c_idx + 1,))
 
             # 최근 투구 리스트
             st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
@@ -1519,7 +1642,8 @@ if loaded:
             _cv_times = st.session_state.get("video_pitch_times") or []
             _cv_past  = [t for t in _cv_times if _cv_now is not None and t <= _cv_now]
             _cv_vid_t = max(_cv_past) if _cv_past else None
-            if (prev and _ocr_i >= 0 and _cv_vd is None and not _cv_running
+            if (st.session_state.get("cv_enabled")
+                    and prev and _ocr_i >= 0 and _cv_vd is None and not _cv_running
                     and _cv_path and os.path.exists(_cv_path)
                     and _cv_vid_t is not None):
                 _cv_tid = _start_cv_check(_cv_path, _cv_vid_t, _ocr_i)
@@ -1553,30 +1677,32 @@ if loaded:
                                 f'<span style="color:#475569;font-size:.7rem;margin-left:.35rem">{_cv_why}</span>')
             elif _cv_running:
                 _cv_body = '<span style="color:#475569;font-size:.8rem">궤적 분석 중…</span>'
+            elif not st.session_state.get("cv_enabled"):
+                _cv_body = ('<span style="color:#334155;font-size:.8rem">'
+                            '꺼짐 — 사이드바에서 켠다</span>')
             else:
                 _cv_body = '<span style="color:#334155;font-size:.8rem">대기</span>'
 
             _cv_n, _cv_h = st.session_state._cv_scored, st.session_state._cv_hits
             _cv_rate = (f'{_cv_h / _cv_n:.0%} ({_cv_h}/{_cv_n})' if _cv_n else '—')
-            # 이 패널은 검증을 통과하지 못했다. Savant 투구별 클립에서는 정확도 78.3%
-            # (LOGO 4폴드)인데, 전체 중계 영상에서는 판정률 32% / 정확도 58.8%로
-            # 최빈값 기준선 54.3%와 구분되지 않는다 (TS-025). 그 사실을 화면에 적는다 —
-            # 기준선 수준 숫자를 성능처럼 보여주는 것이 이 프로젝트에서 가장 피해야 할 일이다.
+            # 학습에 쓰지 않은 경기(775300)의 원본 중계 영상에서 정확도 76.7% / AUC 0.780이다
+            # (n=43, 기준선 58.1%). 클립 단위 검증 78.3%와 사실상 같다 — 프레임 샘플링을
+            # 학습과 맞추고 나서 도메인 격차가 사라졌다 (TS-028). 실측 근거를 화면에 함께 적는다.
             st.markdown(
                 f'<div style="margin-top:.45rem;padding:.5rem .65rem;border-radius:10px;'
-                f'background:rgba(8,14,26,.5);border:1px dashed rgba(148,163,184,.22)">'
+                f'background:rgba(8,14,26,.5);border:1px solid rgba(77,189,138,.18)">'
                 f'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:.5rem">'
                 f'<span style="font-size:.62rem;font-weight:700;letter-spacing:.08em;'
                 f'text-transform:uppercase;color:#475569">영상만으로 · CV'
                 f'<span style="margin-left:.35rem;padding:.05rem .3rem;border-radius:4px;'
-                f'background:rgba(245,158,11,.14);color:#f59e0b;font-size:.58rem;'
-                f'letter-spacing:0">실험적</span></span>'
+                f'background:rgba(77,189,138,.14);color:#4dbd8a;font-size:.58rem;'
+                f'letter-spacing:0">검증됨</span></span>'
                 f'<span style="font-size:.62rem;color:#475569">이번 세션 {_cv_rate}</span>'
                 f'</div>'
                 f'<div style="margin-top:.2rem">{_cv_body}</div>'
                 f'<div style="margin-top:.3rem;font-size:.58rem;color:#3f4a5c;line-height:1.5">'
-                f'클립 단위 검증 78.3% · 전체 중계 영상 58.8%(기준선 54.7%)로 미검증 — '
-                f'판정률도 32%에 그친다'
+                f'미학습 경기 원본 영상 정확도 76.7% · AUC 0.780 (n=43, 기준선 58.1%) — '
+                f'클립 단위 검증 78.3%와 동등'
                 f'</div>'
                 f'</div>',
                 unsafe_allow_html=True)
@@ -1717,7 +1843,11 @@ if _poll_stid and _scan_tasks.get(_poll_stid, {}).get("status") == "scanning":
 
 # CV 판정 폴링 — 백그라운드 결과를 화면에 올리려면 재렌더가 필요하다.
 # 궤적 판정은 프레임 수십 장에 YOLO를 돌리므로 OCR보다 느리다. 간격을 길게 잡는다.
-if st.session_state.get("_cv_task_idx"):
+#
+# 조건을 "대기 목록이 비어 있지 않다"가 아니라 "실제로 처리 중인 태스크가 있다"로 둔다.
+# 앞의 조건은 태스크가 유실되면 영원히 참이 되어 재실행이 끝없이 돈다.
+if any(_cv_tasks.get(_t, {}).get("status") == "processing"
+       for _t in st.session_state.get("_cv_task_idx", {}).values()):
     time.sleep(1.5)
     st.rerun()
 
@@ -1727,17 +1857,15 @@ if _active_tid and _pose_tasks.get(_active_tid, {}).get("status") == "processing
     time.sleep(0.4)
     st.rerun()
 
-# ── 타임스탬프 싱크 폴링 ──
-# _vid_pl 불문 — 영상 시각을 한 번이라도 받으면 계속 polling해서 싱크 놓치지 않음
-_spoll_vtimes  = st.session_state.get("video_pitch_times", [])
-_spoll_nsi     = st.session_state.get("_next_scan_idx", 0)
-_spoll_vid_t   = st.session_state.get("_vid_t")
-_spoll_t_wall  = st.session_state.get("_vid_t_wall", 0.0)
-_spoll_staleness = time.time() - _spoll_t_wall if _spoll_t_wall else 999
-if (_spoll_vtimes
-        and _spoll_nsi < len(_spoll_vtimes)
-        and _spoll_vid_t is not None
-        and _spoll_staleness < 300.0):
-    # JS가 pitch_times를 직접 감지(200ms) → 폴링은 폴백용으로만 사용
-    time.sleep(1.0)
-    st.rerun()
+# ── 타임스탬프 싱크 폴링 — 제거함 ──
+#
+# 여기 있던 `time.sleep(1.0); st.rerun()`이 버튼을 먹통으로 만들고 있었다.
+# 조건(스캔 타임스탬프가 있고 / 영상 시각을 받은 적 있고 / 300초 안)이 재생만 하면
+# 사실상 항상 참이라, 스크립트가 1초마다 무한히 재실행됐다. 그 사이에 들어온 위젯
+# 클릭은 처리되기 전에 다음 재실행에 버려진다 — 실측으로 '다음 투구'를 눌러도
+# st.button()이 True를 돌려준 적이 한 번도 없었다.
+#
+# 폴링 자체가 불필요하다. local_video_player 컴포넌트가 재생 중 200ms마다 시각을
+# setComponentValue로 올리고, 그 값 변경이 이미 Streamlit 재실행을 일으킨다.
+# 즉 싱크는 컴포넌트 보고로 굴러가고 이 루프는 중복이었다. 정지 중에는 보고가
+# 멈추지만 그때는 갱신할 것도 없다.
