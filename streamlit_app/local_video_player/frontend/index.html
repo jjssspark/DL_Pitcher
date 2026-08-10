@@ -34,7 +34,34 @@
   var lastSeekTo   = -1;
   var lastSentTime = -999;
   var lastSentPlaying = null;
+  var lastSentAt   = 0;
   var initialized  = false;
+  var playCommanded = false;
+
+  // 재생 중 시각 보고 간격.
+  //
+  // 200ms였을 때 앱이 통째로 멎었다. setComponentValue 하나하나가 Streamlit 재실행을
+  // 요청하고, 새 요청은 실행 중이던 스크립트를 취소한다. 이 앱의 한 번 실행은
+  // 0.05~0.7초라 200ms 간격으로는 위젯 구간에 닿기 전에 매번 잘렸다 — 실측으로 실행
+  // 120번 중 끝까지 간 것이 5번이었다. 그래서 투구 인덱스가 안 넘어가고 버튼 클릭도
+  // 처리되기 전에 버려졌다.
+  //
+  // 앱이 이 값으로 하는 일은 투구 경계(약 25.7초에 하나) 판정이라 2초면 충분하다.
+  // 재생/정지와 탐색은 아래에서 이벤트로 즉시 보고하므로 반응성은 그대로다.
+  var REPORT_EVERY_MS = 2000;
+
+  function sendState(force) {
+    var t = vid.currentTime;
+    var playing = !vid.paused && !vid.ended;
+    if (!force) {
+      if (Math.abs(t - lastSentTime) < 0.2 && playing === lastSentPlaying) return;
+      if (Date.now() - lastSentAt < REPORT_EVERY_MS) return;
+    }
+    lastSentTime    = t;
+    lastSentPlaying = playing;
+    lastSentAt      = Date.now();
+    stValue({ time: t, playing: playing });
+  }
 
   window.addEventListener("message", function(e) {
     if (e.data.type !== "streamlit:render") return;
@@ -45,17 +72,12 @@
       initialized = true;
 
       if (pollInterval) clearInterval(pollInterval);
-      pollInterval = setInterval(function() {
-        var t = vid.currentTime;
-        var playing = !vid.paused && !vid.ended;
-        var timeChanged    = Math.abs(t - lastSentTime) >= 0.2;
-        var playingChanged = playing !== lastSentPlaying;
-        if (timeChanged || playingChanged) {
-          lastSentTime    = t;
-          lastSentPlaying = playing;
-          stValue({ time: t, playing: playing });
-        }
-      }, 200);
+      pollInterval = setInterval(sendState, 250);
+
+      // 재생/정지·탐색은 사용자가 방금 한 조작이라 다음 주기를 기다리지 않고 올린다.
+      ["play", "pause", "seeked", "ended"].forEach(function (name) {
+        vid.addEventListener(name, function () { sendState(true); });
+      });
     }
 
     if (!args || !vid.src) return;
@@ -66,9 +88,25 @@
       vid.currentTime = st;
     }
 
-    var wantPlay = args.is_playing;
-    if (wantPlay && vid.paused)  { vid.play().catch(function(){}); }
-    if (!wantPlay && !vid.paused){ vid.pause(); }
+    // 재생/정지는 최초 1회만 명령하고 그 뒤로는 사용자에게 맡긴다.
+    //
+    // 매 렌더마다 args.is_playing을 따르게 했더니 앱과 여기가 서로 한 박자씩 늦게
+    // 상태를 되던지며 무한 진동했다. app.py는 이전 실행에서 저장한 is_playing을 읽어
+    // 명령으로 보내고(1255→1260), 그 아래에서 이번에 보고된 실제 상태로 덮어쓴다(1287).
+    // 그래서 컴포넌트는 늘 "자기 자신의 한 사이클 전 상태"를 따라가라고 명령받는다.
+    //
+    //   재생 누름 → playing:true 보고 → 다음 렌더가 옛 false로 "정지" → paused 보고
+    //   → 그다음 렌더가 "재생" → ... 무한 반복
+    //
+    // 실측으로 영상이 3.8초에 멈춰 그대로 있었고, 보고가 끊기니 투구 인덱스도 멎었다.
+    // 200ms 보고 시절의 "영상이 끊긴다"도 같은 진동이 더 빨리 돈 것이다.
+    //
+    // <video controls>가 이미 있어 재생 제어는 사용자 몫이고, 앱이 재생을 켜고 꺼야 할
+    // 화면은 없다. 최초 자동 재생만 살리고 이후 명령은 보내지 않는다.
+    if (!playCommanded && args.is_playing) {
+      playCommanded = true;
+      vid.play().catch(function(){});
+    }
   });
 
   // iframe 높이를 영상 실제 높이에 맞춘다. 480px 고정이던 시절에는 영상이 로드되기

@@ -1851,11 +1851,20 @@ if any(_cv_tasks.get(_t, {}).get("status") == "processing"
     time.sleep(1.5)
     st.rerun()
 
-# 포즈 감지 태스크 폴링 (실시간 폴백 사용 시)
-_active_tid = st.session_state.get("_pose_task_id")
-if _active_tid and _pose_tasks.get(_active_tid, {}).get("status") == "processing":
-    time.sleep(0.4)
-    st.rerun()
+# ── 포즈/OCR 태스크 폴링 — 제거함 ──
+#
+# 여기 있던 `time.sleep(0.4); st.rerun()`이 TS-027에서 지운 1초 폴링과 같은 버그다.
+# 그때 타임스탬프 루프만 걷어내고 이건 남겨뒀는데, 이쪽이 0.4초 주기라 더 나빴다.
+#
+# OCR 검사는 0.5초 간격으로 걸리는데 1.19GB 영상에서 한 프레임을 OCR 하는 데 그보다
+# 오래 걸린다. 그래서 재생 중에는 태스크가 사실상 항상 "processing"이고, 이 블록이
+# 0.4초마다 스크립트를 통째로 재실행시켰다 — 실측으로 실행 80번 중 끝까지 간 것이
+# 2번이었다. 위젯 구간에 닿기 전에 잘리니 투구 인덱스도 안 넘어가고 버튼 클릭도
+# 처리되기 전에 버려진다.
+#
+# 폴링이 없어도 결과는 올라온다. 재생 중에는 local_video_player가 2초마다 시각을
+# 보고해 재실행이 걸리고, 그 재실행이 위쪽에서 완료된 태스크를 거둬간다. 정지 중에는
+# 새 검사가 시작되지 않으므로 거둘 것도 없다.
 
 # ── 타임스탬프 싱크 폴링 — 제거함 ──
 #
