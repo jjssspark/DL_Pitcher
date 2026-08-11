@@ -22,16 +22,24 @@ st.set_page_config(page_title="PitchIQ", page_icon="⚾", layout="wide",
 st.markdown("""<style>
 @import url('https://fonts.googleapis.com/css2?family=Oswald:wght@700;900&display=swap');
 
+/* 밑바탕을 한 단 올렸다. 거의 검정(#080e1a)이라 회색 글자가 전부 묻혔고 화면이
+   무거웠다. 대각선 두 줄로 만들던 X자 무늬는 알파를 절반으로 낮췄다 — 영상 뒤에서
+   교차하며 시선을 끌어 어수선했다. */
 [data-testid="stAppViewContainer"]{
   min-height:100vh;
   background:
-    linear-gradient(115deg,transparent 49.6%,rgba(96,165,250,.05) 49.6% 50%,transparent 50%),
-    linear-gradient(65deg,transparent 49.6%,rgba(96,165,250,.05) 49.6% 50%,transparent 50%),
-    radial-gradient(ellipse 80% 50% at 50% -10%,rgba(59,130,246,.06),transparent),
-    linear-gradient(180deg,#0a1120 0%,#080e1a 40%,#05080f 100%);
+    linear-gradient(115deg,transparent 49.7%,rgba(96,165,250,.022) 49.7% 50%,transparent 50%),
+    linear-gradient(65deg,transparent 49.7%,rgba(96,165,250,.022) 49.7% 50%,transparent 50%),
+    radial-gradient(ellipse 80% 50% at 50% -10%,rgba(59,130,246,.07),transparent),
+    linear-gradient(180deg,#1c2745 0%,#18213a 45%,#141c2f 100%);
   background-attachment:fixed}
-[data-testid="stSidebar"]{background:rgba(10,16,30,.97)!important;border-right:1px solid rgba(59,130,246,.18)}
-html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif;color:#e2e8f0}
+[data-testid="stSidebar"]{background:rgba(30,41,68,.97)!important;border-right:1px solid rgba(96,165,250,.2)}
+
+/* 글씨가 작고 다닥다닥 붙어 보였다. 크기가 거의 rem이라 루트를 키우면 글자와 여백이
+   같이 늘어난다 — 인라인 style이 수십 군데라 개별로 고치는 것보다 이쪽이 확실하다. */
+html{font-size:17.5px}
+html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif;color:#eef2f8;
+  line-height:1.65;letter-spacing:.005em}
 #MainMenu,footer,header{visibility:hidden}
 
 /* 스코어보드 타이포 — 큰 숫자/코드 요소는 콘덴스드 디스플레이 폰트 */
@@ -44,37 +52,37 @@ html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif;color:#e2e
 iframe{transition:none!important}
 
 /* 스코어보드 */
-.scoreboard{background:linear-gradient(135deg,rgba(15,23,42,.95),rgba(20,30,55,.95));
+.scoreboard{background:linear-gradient(135deg,rgba(30,41,66,.95),rgba(20,30,55,.95));
   border:1px solid rgba(59,130,246,.22);border-radius:14px;padding:.7rem 1.2rem;
   margin-bottom:.8rem;backdrop-filter:blur(16px)}
 .team-score{font-size:1.7rem;font-weight:900;letter-spacing:-.03em;line-height:1}
-.team-name{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b;margin-top:.05rem}
+.team-name{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a6b3c6;margin-top:.05rem}
 .inning-box{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.25);
   border-radius:8px;padding:.3rem .65rem;font-size:.8rem;font-weight:700;color:#93c5fd;text-align:center}
 .count-dot{display:inline-block;width:11px;height:11px;border-radius:50%;margin:0 2px}
 
 /* 패널 카드 — 타이포 확대 + hover glow */
-.panel{background:rgba(15,23,42,.7);border:1px solid rgba(59,130,246,.12);
+.panel{background:rgba(30,41,66,.7);border:1px solid rgba(59,130,246,.12);
   border-radius:12px;padding:1.1rem 1.3rem;margin-bottom:.85rem;backdrop-filter:blur(8px);
   transition:border-color .2s,transform .2s}
 .panel:hover{border-color:rgba(59,130,246,.35);transform:translateY(-2px)}
 .panel-title{font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;
-  color:#64748b;margin-bottom:.5rem}
+  color:#a6b3c6;margin-bottom:.5rem}
 .player-name{font-size:1.15rem;font-weight:800;color:#e2e8f0;line-height:1.15}
-.player-sub{font-size:.8rem;color:#64748b;margin-top:.15rem}
+.player-sub{font-size:.8rem;color:#a6b3c6;margin-top:.15rem}
 
 /* 구종 카드 */
 .pitch-card{border-radius:10px;padding:.95rem 1.25rem;margin-bottom:.6rem;
   border:1px solid rgba(255,255,255,.06);transition:border-color .2s,transform .2s}
 .pitch-card:hover{transform:translateY(-2px)}
 .pitch-code{font-size:2.4rem;font-weight:900;letter-spacing:-.02em;line-height:1}
-.pitch-name{font-size:.85rem;color:#94a3b8;margin-top:.1rem}
-.pitch-speed{font-size:.9rem;font-weight:700;color:#64748b;margin-top:.18rem}
+.pitch-name{font-size:.85rem;color:#cbd5e1;margin-top:.1rem}
+.pitch-speed{font-size:.9rem;font-weight:700;color:#a6b3c6;margin-top:.18rem}
 
 /* 타임라인 행 — hover 시 상세정보 노출 */
 .pitch-row{display:flex;align-items:center;gap:.5rem;padding:.4rem .7rem;
   border-radius:7px;margin-bottom:.22rem;font-size:.82rem;transition:background .15s}
-.pitch-row-detail{max-height:0;opacity:0;overflow:hidden;font-size:.68rem;color:#64748b;
+.pitch-row-detail{max-height:0;opacity:0;overflow:hidden;font-size:.68rem;color:#a6b3c6;
   transition:max-height .2s ease,opacity .2s ease}
 .pitch-row:hover{background:rgba(59,130,246,.08)!important}
 .pitch-row:hover .pitch-row-detail{max-height:40px;opacity:1;margin-top:.15rem}
@@ -85,7 +93,7 @@ iframe{transition:none!important}
 .badge-sim{background:rgba(251,191,36,.12);color:#fbbf24;border:1px solid rgba(251,191,36,.25)}
 
 /* 하단 통계 카드 — hover lift */
-.stat-card{background:rgba(15,23,42,.6);border:1px solid rgba(59,130,246,.1);
+.stat-card{background:rgba(30,41,66,.6);border:1px solid rgba(59,130,246,.1);
   border-radius:10px;padding:.9rem 1.1rem;text-align:center;margin-bottom:.5rem;
   transition:border-color .2s,transform .2s}
 .stat-card:hover{border-color:rgba(59,130,246,.4);transform:translateY(-3px)}
@@ -95,19 +103,19 @@ iframe{transition:none!important}
 .hero-title{font-size:2.6rem;font-weight:900;letter-spacing:-.02em;line-height:1.1;
   background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399);-webkit-background-clip:text;
   -webkit-text-fill-color:transparent;background-clip:text}
-.hero-tagline{font-size:1.05rem;color:#94a3b8;margin-top:.6rem}
+.hero-tagline{font-size:1.05rem;color:#cbd5e1;margin-top:.6rem}
 .hero-badge{display:inline-block;margin-top:1rem;padding:.4rem 1rem;border-radius:999px;
   background:rgba(52,211,153,.12);border:1px solid rgba(52,211,153,.35);color:#34d399;
   font-size:.85rem;font-weight:700}
 .feature-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));
   gap:1rem;margin-top:2.2rem}
-.feature-card{background:rgba(15,23,42,.7);border:1px solid rgba(59,130,246,.14);
+.feature-card{background:rgba(30,41,66,.7);border:1px solid rgba(59,130,246,.14);
   border-radius:14px;padding:1.4rem 1.2rem;text-align:left;transition:border-color .2s,transform .2s;
   cursor:default}
 .feature-card:hover{border-color:rgba(167,139,250,.5);transform:translateY(-4px)}
 .feature-icon{font-size:1.8rem;margin-bottom:.5rem}
 .feature-title{font-size:1.02rem;font-weight:800;color:#e2e8f0}
-.feature-card-desc{max-height:0;opacity:0;overflow:hidden;font-size:.82rem;color:#94a3b8;
+.feature-card-desc{max-height:0;opacity:0;overflow:hidden;font-size:.82rem;color:#cbd5e1;
   line-height:1.5;margin-top:0;transition:max-height .25s ease,opacity .25s ease,margin-top .25s ease}
 .feature-card:hover .feature-card-desc{max-height:120px;opacity:1;margin-top:.55rem}
 
@@ -117,15 +125,15 @@ div[data-testid="stButton"]>button{
   padding:.45rem 1.1rem!important;transition:opacity .18s!important}
 div[data-testid="stButton"]>button:hover{opacity:.82!important}
 [data-testid="stFileUploader"]{border:1.5px dashed rgba(59,130,246,.3)!important;
-  border-radius:10px!important;background:rgba(15,23,42,.4)!important}
+  border-radius:10px!important;background:rgba(30,41,66,.4)!important}
 
 /* 랜딩 스플래시 */
-.intro-splash{position:fixed;inset:0;background:#080e1a;display:flex;flex-direction:column;
+.intro-splash{position:fixed;inset:0;background:#131c30;display:flex;flex-direction:column;
   align-items:center;justify-content:center;gap:1rem;z-index:9999}
 .intro-splash .intro-logo{font-size:3.4rem;font-weight:900;letter-spacing:-.02em;
   background:linear-gradient(135deg,#60a5fa,#a78bfa,#34d399);-webkit-background-clip:text;
   -webkit-text-fill-color:transparent;background-clip:text;animation:introPulse 1.4s ease-in-out infinite}
-.intro-splash .intro-tagline{font-size:1rem;color:#94a3b8}
+.intro-splash .intro-tagline{font-size:1rem;color:#cbd5e1}
 .intro-badge{display:inline-flex;align-items:center;gap:.4rem;padding:.35rem .9rem;
   border-radius:999px;background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.35);
   color:#f87171;font-size:.78rem;font-weight:700;letter-spacing:.04em}
@@ -137,8 +145,62 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .seg-dot{display:inline-block;width:13px;height:13px;border-radius:3px;margin:0 2px}
 .team-score{font-size:2.1rem}
 
+/* ── 위계 정리 ────────────────────────────────────────────────
+   화면이 밋밋했던 건 색이 아니라 위계 때문이다. 카드가 전부 같은 배경·같은 테두리·
+   비슷한 글자 크기라 눈이 어디부터 볼지 정하지 못한다. 라벨은 더 죽이고 값은 더
+   키운다. 요소는 하나도 늘리지 않는다 — 영상 컴포넌트 위의 요소 수가 바뀌면
+   iframe이 리마운트된다 (TS-034). */
+.block-container{padding-top:1.1rem!important;padding-bottom:2rem!important}
+
+/* 스코어보드 위쪽에 중계 그래픽처럼 팀 색 띠를 깐다. 두 팀 색을 가운데서 가른다. */
+.scoreboard{position:relative;overflow:hidden;padding:.9rem 1.2rem .8rem}
+.scoreboard::before{content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  background:linear-gradient(90deg,var(--away,#cbd5e1),var(--away,#cbd5e1) 46%,
+    rgba(148,163,184,.12) 50%,var(--home,#cbd5e1) 54%,var(--home,#cbd5e1))}
+.team-score{font-size:2.6rem;letter-spacing:-.045em}
+
+/* 라벨 계열은 전부 한 단 낮춘다 */
+.panel-title{font-size:.62rem;letter-spacing:.14em;color:#7b8aa1}
+.player-name{font-size:1.25rem;letter-spacing:-.01em;color:#e8edf5}
+.player-sub{font-size:.74rem;color:#93a1b6}
+
+/* 방금 던진 구종은 오른쪽 열의 주인공이다. 왼쪽에 구종 색 띠를 세운다. */
+.pitch-card{border-left-width:3px;padding:1.05rem 1.15rem}
+.pitch-code{font-size:2.7rem}
+.pitch-name{font-size:.8rem;color:#b3bdcd}
+
+/* 통계 카드는 숫자만 남긴다 */
+.stat-card{padding:1rem .9rem}
+
+/* 사이드바 카드 사이 리듬 */
+.sidebar-card{margin-bottom:.85rem;padding:1rem 1.05rem}
+
+/* ── 숨 쉴 자리 ───────────────────────────────────────────────
+   "다닥다닥 붙어 있다"는 지적. 줄 간격만으로는 안 되고 요소 사이 여백을 벌려야 한다.
+   작은 라벨들은 아예 한 단 키운다 — .58~.62rem은 읽으라고 만든 크기가 아니다. */
+.panel{padding:1.25rem 1.4rem;margin-bottom:1.05rem}
+
+/* 우측 열이 다닥다닥 붙어 있다는 지적. 카드 사이를 벌리고 안쪽 여백도 키운다.
+   Streamlit이 요소 사이에 주는 간격이 작아 카드 자신의 margin으로 벌려야 한다. */
+.panel-secondary{padding:1.2rem 1.3rem;margin-bottom:1.1rem;border-radius:12px}
+[data-testid="stVerticalBlock"]{gap:.75rem}
+.pitch-card{margin-bottom:1rem}
+.panel-title{font-size:.74rem;letter-spacing:.12em;color:#93a1b6;margin-bottom:.7rem}
+.player-sub{font-size:.82rem}
+.pitch-row{padding:.55rem .8rem;margin-bottom:.34rem;font-size:.88rem}
+.pitch-name{font-size:.88rem}
+.stat-card{padding:1.15rem 1rem}
+.pl-row{padding:.3rem .35rem}
+.pl-head{gap:.5rem;font-size:.87rem}
+.pl-code{font-size:.78rem;width:2.1rem}
+.pl-note{font-size:.76rem;line-height:1.65}
+.pl-en{font-size:.68rem}
+.pl-speed{font-size:1rem}
+.scoreboard{padding:1.1rem 1.4rem 1rem;margin-bottom:1.05rem}
+.stitch-divider{margin:1rem 0!important}
+
 /* 보조 카드 / 카드 배지 */
-.panel-secondary{background:rgba(15,23,42,.5);border:1px solid rgba(59,130,246,.08);
+.panel-secondary{background:rgba(30,41,66,.5);border:1px solid rgba(59,130,246,.08);
   border-radius:10px;padding:.8rem 1rem;margin-bottom:.65rem}
 .panel-secondary .panel-title{font-size:.66rem}
 .card-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.66rem;font-weight:700;
@@ -152,10 +214,10 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .conf-gauge{width:84px;height:84px;border-radius:50%;position:relative;flex-shrink:0;
   background:conic-gradient(var(--gauge-color) calc(var(--pct) * 3.6deg), rgba(255,255,255,.08) 0deg);
   display:flex;flex-direction:column;align-items:center;justify-content:center}
-.conf-gauge::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#0f172a}
+.conf-gauge::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#1b2540}
 .conf-gauge>*{position:relative;z-index:1}
 .conf-gauge-code{font-size:1.25rem;font-weight:900;line-height:1}
-.conf-gauge-pct{font-size:.6rem;font-weight:700;color:#94a3b8;margin-top:.1rem}
+.conf-gauge-pct{font-size:.6rem;font-weight:700;color:#cbd5e1;margin-top:.1rem}
 
 /* 게임 HUD — COMBO 스트릭 배지 */
 .combo-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:999px;
@@ -185,7 +247,7 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 /* 사이드바 — 스티치 구분선 & 카드 */
 .stitch-divider{height:5px;margin:.7rem 0;
   border-top:1px dashed rgba(148,163,184,.28);border-bottom:1px dashed rgba(148,163,184,.28)}
-.sidebar-card{background:rgba(15,23,42,.55);border:1px solid rgba(59,130,246,.1);
+.sidebar-card{background:rgba(30,41,66,.55);border:1px solid rgba(59,130,246,.1);
   border-radius:10px;padding:.75rem .9rem;margin-bottom:.7rem}
 </style>""", unsafe_allow_html=True)
 
@@ -193,7 +255,7 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 FIXED_DEMO_GAME_PK   = 775300
 FIXED_DEMO_VIDEO_URL = "https://youtu.be/gMm3EODDb6w"
 TEAM_COLORS = {"NYY": "#0C2340", "LAD": "#005A9C"}  # 고정 데모 게임은 이 두 팀만 등장
-# 어두운 배경(#0a1120)에 쓸 수 있게 밝기를 올린 변형. 구단 원색을 그대로 쓰면
+# 어두운 배경(#17203a)에 쓸 수 있게 밝기를 올린 변형. 구단 원색을 그대로 쓰면
 # NYY 네이비(#0C2340)가 배경과 명도 차가 거의 없어 팀명이 보이지 않는다.
 TEAM_ACCENTS = {"NYY": "#8aa9d6", "LAD": "#4d9fe0"}
 FIXED_DEMO_VIDEO_DURATION_SEC = 8231  # 고정 데모 YouTube 영상 총 길이(초)
@@ -233,23 +295,146 @@ def _timeline_anchors(pitches: list[dict]) -> list[tuple[float, int]]:
     return cache[key]
 
 # ══ 구종 메타 ══════════════════════════════════════════════════════
+#
+# emoji를 뺐다. 색 점 옆에 같은 색 원 이모지를 두는 건 정보가 없고, 🔮·🐢 같은 건
+# 분석 도구로 안 보인다. 대신 shape로 궤적 모양을 그린다 — 구종의 정체는 결국
+# "어떻게 휘는가"라서 그림 하나가 이름보다 빠르다.
+#
+# speed는 MLB 일반 구간이고 이 경기 값이 아니다. 카드에 그렇게 적어둔다.
 PITCH_META = {
-    "FF": {"name": "포심 패스트볼", "color": "#ef4444", "emoji": "🔴"},
-    "FA": {"name": "패스트볼",      "color": "#f87171", "emoji": "🔴"},
-    "SI": {"name": "싱커",          "color": "#f97316", "emoji": "🟠"},
-    "FC": {"name": "커터",          "color": "#eab308", "emoji": "🟡"},
-    "SL": {"name": "슬라이더",      "color": "#3b82f6", "emoji": "🔵"},
-    "ST": {"name": "스위퍼",        "color": "#06b6d4", "emoji": "🩵"},
-    "CU": {"name": "커브",          "color": "#8b5cf6", "emoji": "🟣"},
-    "KC": {"name": "너클커브",      "color": "#a855f7", "emoji": "🔮"},
-    "CH": {"name": "체인지업",      "color": "#10b981", "emoji": "🟢"},
-    "FS": {"name": "스플리터",      "color": "#0891b2", "emoji": "💧"},
-    "FO": {"name": "포크볼",        "color": "#0e7490", "emoji": "💧"},
-    "KN": {"name": "너클볼",        "color": "#78716c", "emoji": "🪨"},
-    "EP": {"name": "이피어스",      "color": "#6b7280", "emoji": "🐢"},
-    "CS": {"name": "슬로커브",      "color": "#7c3aed", "emoji": "💜"},
-    "OTHER": {"name": "기타",       "color": "#475569", "emoji": "⚫"},
+    "FF": {"name": "포심 패스트볼", "en": "Four-Seam Fastball", "color": "#ef4444",
+           "shape": "straight", "speed": "92~100",
+           "note": "백스핀이 최대라 중력 대비 덜 떨어진다. 타자 눈에는 솟아 오는 것처럼 보인다."},
+    "FA": {"name": "패스트볼", "en": "Fastball", "color": "#f87171",
+           "shape": "straight", "speed": "90~98",
+           "note": "Statcast가 세부 구분을 못 붙인 속구. 포심과 같은 계열로 본다."},
+    "SI": {"name": "싱커", "en": "Sinker", "color": "#f97316",
+           "shape": "sink", "speed": "90~97",
+           "note": "회전축이 기울어 팔 쪽으로 가라앉는다. 땅볼을 유도하려고 던진다."},
+    "FC": {"name": "커터", "en": "Cutter", "color": "#eab308",
+           "shape": "cut", "speed": "86~94",
+           "note": "속구 궤적을 유지하다 마지막에 글러브 쪽으로 살짝 꺾인다. 배트를 부러뜨리는 공."},
+    "SL": {"name": "슬라이더", "en": "Slider", "color": "#3b82f6",
+           "shape": "slide", "speed": "80~89",
+           "note": "옆으로 미끄러지며 떨어진다. 2스트라이크 결정구로 가장 많이 쓴다."},
+    "ST": {"name": "스위퍼", "en": "Sweeper", "color": "#06b6d4",
+           "shape": "sweep", "speed": "78~86",
+           "note": "슬라이더보다 횡변화가 크다. 낙차는 적고 옆으로 크게 쓸린다."},
+    "CU": {"name": "커브", "en": "Curveball", "color": "#8b5cf6",
+           "shape": "drop", "speed": "74~83",
+           "note": "탑스핀으로 큰 아치를 그리며 떨어진다. 속구와의 구속 차가 가장 크다."},
+    "KC": {"name": "너클커브", "en": "Knuckle Curve", "color": "#a855f7",
+           "shape": "drop", "speed": "76~84",
+           "note": "검지를 세워 쥐는 커브. 일반 커브보다 낙차가 급하다."},
+    "CH": {"name": "체인지업", "en": "Changeup", "color": "#10b981",
+           "shape": "sink", "speed": "79~89",
+           "note": "속구와 똑같은 팔스윙으로 8~12mph 느리게 던진다. 타이밍을 무너뜨리는 공."},
+    "FS": {"name": "스플리터", "en": "Splitter", "color": "#0891b2",
+           "shape": "dive", "speed": "83~90",
+           "note": "검지와 중지를 벌려 쥔다. 홈플레이트 앞에서 급강하한다."},
+    "FO": {"name": "포크볼", "en": "Forkball", "color": "#0e7490",
+           "shape": "dive", "speed": "75~85",
+           "note": "스플리터보다 더 깊이 끼워 쥐어 느리고 낙차가 크다."},
+    "KN": {"name": "너클볼", "en": "Knuckleball", "color": "#78716c",
+           "shape": "wobble", "speed": "60~75",
+           "note": "회전을 거의 없애 공기 흐름에 따라 불규칙하게 흔들린다. 포수도 못 읽는다."},
+    "EP": {"name": "이피어스", "en": "Eephus", "color": "#6b7280",
+           "shape": "lob", "speed": "50~65",
+           "note": "산처럼 높이 띄우는 초저속 변화구. 타이밍을 통째로 뺏는다."},
+    "CS": {"name": "슬로커브", "en": "Slow Curve", "color": "#7c3aed",
+           "shape": "drop", "speed": "65~75",
+           "note": "커브 중에서도 느리다. 같은 커브를 두 속도로 나눠 쓴다."},
+    "OTHER": {"name": "기타", "en": "Other", "color": "#8a99b0",
+              "shape": "straight", "speed": "—",
+              "note": "Statcast가 분류하지 못한 투구."},
 }
+
+# 궤적. 200x110 좌표계의 3차 베지에 제어점 네 개다. 왼쪽이 릴리스, 오른쪽이 홈플레이트.
+# 작은 아이콘과 호버 카드의 큰 그림이 같은 곡선을 쓴다 — 두 벌로 두면 어긋난다.
+PITCH_CURVES = {
+    "straight": ((16, 24), (70, 30), (120, 38), (180, 48)),
+    "cut":      ((16, 22), (75, 30), (125, 44), (180, 66)),
+    "slide":    ((16, 22), (80, 28), (130, 52), (180, 80)),
+    "sweep":    ((16, 30), (70, 26), (125, 44), (180, 74)),
+    "sink":     ((16, 22), (75, 42), (128, 62), (180, 88)),
+    "dive":     ((16, 22), (95, 26), (145, 44), (178, 98)),
+    "drop":     ((16, 18), (90, 16), (150, 52), (178, 100)),
+    "wobble":   ((16, 44), (60, 16), (105, 74), (180, 48)),
+    "lob":      ((16, 92), (58, -14), (140, -14), (180, 92)),
+}
+REFERENCE_SHAPE = "straight"      # 비교 기준선 — 속구는 거의 안 휜다
+
+
+def _bezier(points, t: float) -> tuple[float, float]:
+    """3차 베지에 위의 한 점."""
+    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = points
+    u = 1 - t
+    x = u**3 * x0 + 3 * u**2 * t * x1 + 3 * u * t**2 * x2 + t**3 * x3
+    y = u**3 * y0 + 3 * u**2 * t * y1 + 3 * u * t**2 * y2 + t**3 * y3
+    return x, y
+
+
+def _curve_path(points) -> str:
+    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = points
+    return f"M{x0} {y0} C{x1} {y1}, {x2} {y2}, {x3} {y3}"
+
+
+def _pitch_arc(code: str, width: int = 32) -> str:
+    """목록·카드에 쓰는 작은 궤적 아이콘."""
+    meta = PITCH_META.get(code, PITCH_META["OTHER"])
+    pts = PITCH_CURVES.get(meta["shape"], PITCH_CURVES["straight"])
+    ex, ey = pts[3]
+    return (
+        f'<svg viewBox="0 0 200 118" width="{width}" height="{int(width * 0.59)}" '
+        f'style="overflow:visible;flex-shrink:0">'
+        f'<path d="{_curve_path(pts)}" fill="none" stroke="{meta["color"]}" '
+        f'stroke-width="9" stroke-linecap="round" opacity=".85"/>'
+        f'<circle cx="{ex}" cy="{ey}" r="13" fill="{meta["color"]}"/></svg>'
+    )
+
+
+def _pitch_arc_big(code: str) -> str:
+    """호버 카드용 큰 그림. 속구 기준선과 겹쳐 그려야 '얼마나 휘는지'가 보인다.
+
+    공을 릴리스부터 홈플레이트까지 여러 개 찍는다. 뒤로 갈수록 커지고 진해진다 —
+    다가온다는 느낌을 주려는 것이다. 오른쪽 끝에 홈플레이트를 둬서 어디를 향하는
+    궤적인지 알 수 있게 한다.
+    """
+    meta = PITCH_META.get(code, PITCH_META["OTHER"])
+    shape = meta["shape"]
+    pts = PITCH_CURVES.get(shape, PITCH_CURVES["straight"])
+    ref = PITCH_CURVES[REFERENCE_SHAPE]
+
+    balls = ""
+    for i, t in enumerate((0.0, 0.22, 0.44, 0.66, 0.85, 1.0)):
+        x, y = _bezier(pts, t)
+        r = 3.0 + i * 1.7
+        balls += (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" '
+                  f'fill="{meta["color"]}" opacity="{0.3 + i * 0.14:.2f}"/>')
+
+    reference = ""
+    if shape != REFERENCE_SHAPE:
+        reference = (f'<path d="{_curve_path(ref)}" fill="none" stroke="#8a99b0" '
+                     f'stroke-width="2" stroke-dasharray="5 5" opacity=".45"/>')
+
+    return (
+        '<svg viewBox="-6 -14 218 138" width="100%" style="display:block">'
+        # 스트라이크존 — 궤적이 어디로 향하는지 가늠자
+        '<rect x="168" y="30" width="30" height="52" rx="2" fill="none" '
+        'stroke="#8a99b0" stroke-width="1.4" stroke-dasharray="3 4" opacity=".35"/>'
+        '<path d="M170 104 L196 104 L196 110 L183 118 L170 110 Z" '
+        'fill="#93a1b6" opacity=".5"/>'
+        + reference
+        + f'<path d="{_curve_path(pts)}" fill="none" stroke="{meta["color"]}" '
+          f'stroke-width="2.6" stroke-linecap="round" opacity=".55"/>'
+        + balls
+        + f'<text x="16" y="-2" font-size="10" fill="#8a99b0">릴리스</text>'
+        + (f'<text x="118" y="-2" font-size="10" fill="#8a99b0">--- 속구 기준</text>'
+           if reference else '')
+        + '</svg>'
+    )
+
+
 FASTBALLS = {"FF", "FA", "SI", "FC"}
 BREAKING  = {"SL", "ST", "CU", "KC", "CS"}
 OFFSPEED  = {"CH", "FS", "FO", "KN", "EP"}
@@ -271,20 +456,10 @@ def _make_model_ref() -> list:
 def _make_scan_tasks() -> dict:
     return {}
 
-@st.cache_resource
-def _make_cv_tasks() -> dict:
-    return {}
-
-@st.cache_resource
-def _make_cv_model_ref() -> list:
-    return [None, None]  # [분류기, 공 감지기]
-
 _pose_tasks   = _make_pose_tasks()
 _bilstm_tasks = _make_bilstm_tasks()
 _model_ref    = _make_model_ref()
 _scan_tasks   = _make_scan_tasks()
-_cv_tasks     = _make_cv_tasks()
-_cv_model_ref = _make_cv_model_ref()
 _game_cache: dict = {}
 
 
@@ -513,14 +688,41 @@ def _predict_next(pitches: list, idx: int) -> dict:
 
 
 # ══ UI 헬퍼 ══════════════════════════════════════════════════════
-def _diamond_svg(on_1b: bool, on_2b: bool, on_3b: bool) -> str:
-    def sq(on, x, y):
-        c = "#fbbf24" if on else "rgba(100,116,139,.2)"
-        return f'<rect x="{x}" y="{y}" width="12" height="12" rx="2" fill="{c}" transform="rotate(45,{x+6},{y+6})"/>'
+def _diamond_svg(on_1b: bool, on_2b: bool, on_3b: bool, size: int = 118) -> str:
+    """실제 내야처럼 그린 주자 표시.
+
+    전에는 마름모 네 개를 띄엄띄엄 찍어둬서 어디가 몇 루인지 안 보였다. 내야 흙과
+    잔디, 베이스 패스를 같이 그리면 각 점이 무엇인지 설명이 필요 없다. 주자가 있는
+    베이스는 노란색으로 채우고 링을 둘러 눈에 띄게 한다.
+    """
+    HOME, FIRST, SECOND, THIRD = (60, 104), (104, 60), (60, 16), (16, 60)
+
+    def base(pos, on, rotate=True):
+        x, y = pos
+        fill = "#fbbf24" if on else "rgba(203,213,225,.28)"
+        ring = (f'<rect x="{x-13}" y="{y-13}" width="26" height="26" rx="4" fill="none" '
+                f'stroke="#fbbf24" stroke-width="2" opacity=".45" '
+                f'transform="rotate(45,{x},{y})"/>') if on else ""
+        return (ring + f'<rect x="{x-8}" y="{y-8}" width="16" height="16" rx="2.5" '
+                f'fill="{fill}" transform="rotate(45,{x},{y})"/>')
+
     return (
-        '<svg width="50" height="50" viewBox="0 0 50 50">'
-        + sq(on_2b, 19, 2) + sq(on_3b, 2, 19) + sq(on_1b, 36, 19)
-        + '<rect x="19" y="36" width="12" height="12" rx="2" fill="rgba(100,116,139,.12)" transform="rotate(45,25,42)"/>'
+        f'<svg width="{size}" height="{size}" viewBox="0 0 120 120" style="flex-shrink:0">'
+        # 잔디 -> 내야 흙 -> 베이스 패스 순으로 깐다
+        '<path d="M60 8 L112 60 L60 112 L8 60 Z" fill="rgba(52,211,153,.07)"/>'
+        '<path d="M60 20 L100 60 L60 100 L20 60 Z" fill="rgba(180,120,70,.16)"/>'
+        '<path d="M60 104 L104 60 L60 16 L16 60 Z" fill="none" '
+        'stroke="rgba(203,213,225,.3)" stroke-width="2.5"/>'
+        # 마운드
+        '<circle cx="60" cy="60" r="9" fill="rgba(180,120,70,.35)"/>'
+        + base(SECOND, on_2b) + base(THIRD, on_3b) + base(FIRST, on_1b)
+        # 홈플레이트 — 오각형이라 베이스와 구분된다
+        + f'<path d="M{HOME[0]-8} {HOME[1]-6} L{HOME[0]+8} {HOME[1]-6} '
+          f'L{HOME[0]+8} {HOME[1]+2} L{HOME[0]} {HOME[1]+9} L{HOME[0]-8} {HOME[1]+2} Z" '
+          'fill="rgba(241,245,249,.65)"/>'
+        + '<text x="104" y="78" font-size="11" fill="#a6b3c6" font-weight="700">1</text>'
+        + '<text x="56" y="10" font-size="11" fill="#a6b3c6" font-weight="700">2</text>'
+        + '<text x="6" y="78" font-size="11" fill="#a6b3c6" font-weight="700">3</text>'
         + '</svg>'
     )
 
@@ -551,7 +753,7 @@ def _seg_dots(n: int, total: int, color_on: str, color_off: str = "rgba(100,116,
 def _score_color(diff: int) -> str:
     if diff > 0: return "#34d399"
     if diff < 0: return "#f87171"
-    return "#94a3b8"
+    return "#cbd5e1"
 
 
 # ══ 포즈 감지 + 영상 다운로드 백그라운드 ════════════════════════════
@@ -600,48 +802,52 @@ def _start_pose_check(video_path: str, check_time: float) -> str:
 # 위 실측 표시는 Statcast API에서 온다 — 정답이지만 API가 있어야만 나온다.
 # 아래 경로는 같은 값을 영상만으로 낸다. 범위는 FASTBALL vs BREAKING 2분류다
 # (OFFSPEED는 중계 궤적으로 안 갈린다 — ADR-0012).
-def _get_cv_models():
-    """분류기 + 공 감지기 지연 로드. 둘 다 무거워서 최초 판정 때 한 번만 올린다."""
-    if _cv_model_ref[0] is None:
-        from pitch_type_cv.group_classifier import load_classifier
-        from pitch_type_cv.live_classifier import TWO_CLASS_MODEL_PATH
-        _cv_model_ref[0] = load_classifier(TWO_CLASS_MODEL_PATH)
-    if _cv_model_ref[1] is None:
-        from ultralytics import YOLO
-        _cv_model_ref[1] = YOLO(os.path.join(ROOT, "models", "ball_broadcast_v1.pt"))
-    return _cv_model_ref[0], _cv_model_ref[1]
+@st.cache_data(show_spinner=False)
+def _load_cv_verdicts() -> dict:
+    """미리 계산해 둔 영상 판정. scripts/batch_cv_verdicts.py가 만든다.
 
-
-def _run_cv_check_bg(task_id: str, video_path: str, pitch_time: float, pitch_idx: int) -> None:
-    """영상 궤적으로 구종 판정 (백그라운드). 실패는 실패로 남긴다."""
+    재생 중에 투구마다 YOLO를 돌리던 경로를 걷어냈다. 두 가지가 걸렸다 — 재생이
+    무거워지고, 시연 중 실제로 본 투구만 채점되므로 표본이 수십 개에 머물렀다(n=43).
+    미리 돌려두면 부하가 0이고 표본이 그대로 남는다.
+    """
+    path = os.path.join(ROOT, "streamlit_app", "fixed_demo_cv.json")
+    if not os.path.exists(path):
+        return {}
     try:
-        from pitch_type_cv.live_classifier import classify_video_pitch
-        classifier, detector = _get_cv_models()
-        verdict = classify_video_pitch(classifier, detector, video_path, pitch_time)
-        _cv_tasks[task_id] = {
-            "status": "done", "pitch_idx": pitch_idx, "pitch_time": pitch_time,
-            "group": verdict.group, "confidence": verdict.confidence,
-            "probabilities": verdict.probabilities,
-            "n_points": verdict.n_points, "reason": verdict.reason,
-        }
-        print(f"[CV] idx={pitch_idx} t={pitch_time:.1f}s → "
-              f"{verdict.group or '판정불가(' + verdict.reason + ')'} "
-              f"conf={verdict.confidence:.2f} pts={verdict.n_points}")
-    except Exception as e:
-        print(f"[CV] ERROR idx={pitch_idx}: {e}")
-        _cv_tasks[task_id] = {
-            "status": "error", "pitch_idx": pitch_idx, "group": None,
-            "reason": "error", "error": str(e), "n_points": 0, "confidence": 0.0,
-        }
+        with open(path) as fp:
+            raw = json.load(fp)
+    except Exception:
+        return {}
+    return {int(k): v for k, v in raw.get("verdicts", {}).items()}
 
 
-def _start_cv_check(video_path: str, pitch_time: float, pitch_idx: int) -> str:
-    task_id = str(uuid.uuid4())[:8]
-    _cv_tasks[task_id] = {"status": "processing", "pitch_idx": pitch_idx}
-    threading.Thread(
-        target=_run_cv_check_bg, args=(task_id, video_path, pitch_time, pitch_idx), daemon=True
-    ).start()
-    return task_id
+
+def _cv_accuracy(verdicts: dict, pitches: list[dict]) -> dict:
+    """미리 계산한 판정을 Statcast 정답으로 채점한다.
+
+    두 가지를 빼고 센다. 궤적을 못 잡은 건 판정이 아니고, 정답이 OFFSPEED면 2분류
+    모델이 낼 수 없는 클래스라 무조건 오답이 된다 — 그건 모델이 아니라 범위의
+    문제다 (ADR-0012). 대신 뺀 개수를 같이 돌려줘 화면에 적는다.
+    """
+    decided = scored = hits = fastballs = 0
+    for idx, row in verdicts.items():
+        group = row.get("group")
+        if not group:
+            continue
+        decided += 1
+        truth = _statcast_to_two_class(pitches[idx]["pitch_type"]) if idx < len(pitches) else None
+        if truth:
+            scored += 1
+            hits += int(truth == group)
+            fastballs += int(truth == "FASTBALL")
+    # 기준선은 이 채점 표본의 다수 클래스 비율이다. 예전엔 58.1%를 적어뒀는데 그건
+    # 실험실 테스트셋 값이라 표본 구성이 다르다. 같은 표본에서 계산해야 "아무것도
+    # 안 하고 한쪽으로만 찍었을 때"와 정직하게 비교된다.
+    base = max(fastballs, scored - fastballs) / scored if scored else None
+    return {"attempted": len(verdicts), "decided": decided,
+            "scored": scored, "hits": hits, "baseline": base,
+            "acc": hits / scored if scored else None}
+
 
 
 def _statcast_to_two_class(pitch_type: str | None) -> str | None:
@@ -871,12 +1077,6 @@ _DEFAULTS = {
                                     # 투구 시각을 전부 확보하면 여기를 다시 채운다.
     "_scan_raw_data":        [],    # 스캔 순서 기준 raw OCR 데이터 (scan idx → {type, speed})
     "_next_scan_idx":        0,     # 다음 처리할 스캔 타임스탬프 인덱스
-    "cv_enabled":            False, # CV 궤적 판정 사용 여부 (사이드바 토글, 기본 꺼짐)
-    "_cv_verdicts":          {},    # 투구 idx -> CV 판정 결과 (영상만으로 낸 실측)
-    "_cv_task_idx":          {},    # 투구 idx -> 진행 중 태스크 id (중복 실행 방지)
-    "_cv_hits":              0,     # API 정답 대비 CV 적중 수
-    "_cv_scored":            0,     # 채점된 수 (판정 성공 & 정답이 2분류인 것만)
-    "_cv_unavailable":       0,     # 궤적을 못 잡아 판정 불가한 수
     "_scan_task_id":         None,
     "_scan_status":          "idle",  # idle | scanning | done | error
     "_scan_version":         "",
@@ -1026,31 +1226,6 @@ meta      = st.session_state.game_meta
 c_idx     = st.session_state.current_pitch_idx
 loaded    = bool(pitches)
 
-# ── 완료된 CV 판정 수거 & 채점 ──
-# 백그라운드 스레드가 _cv_tasks에 넣은 결과를 세션 상태로 옮긴다. 채점은 여기서
-# 한 번만 한다 — 렌더 중에 세면 재렌더마다 중복 집계된다 (스트릭 로직이 같은 이유로
-# _streak_calc_idx를 둔다).
-for _cvi, _cvt in list(st.session_state._cv_task_idx.items()):
-    _cvr = _cv_tasks.get(_cvt)
-    if _cvr is None:
-        # 태스크 딕셔너리가 사라진 경우(앱 재시작, cache_resource 해제). 그냥 두면
-        # 이 항목이 영원히 안 지워지고 아래 폴링이 1.5초마다 재실행을 무한히 걸어
-        # 버튼 클릭이 전부 재렌더에 묻힌다.
-        del st.session_state._cv_task_idx[_cvi]
-        continue
-    if _cvr.get("status") == "processing":
-        continue
-    _truth = _statcast_to_two_class(pitches[_cvi]["pitch_type"]) if _cvi < len(pitches) else None
-    st.session_state._cv_verdicts[_cvi] = {**_cvr, "truth": _truth}
-    if _cvr.get("group") is None:
-        st.session_state._cv_unavailable += 1
-    elif _truth:
-        # 정답이 OFFSPEED면 채점에서 뺀다. 2분류 모델은 그 클래스를 낼 수 없어
-        # 무조건 오답이 되고, 그건 모델이 아니라 범위의 문제다 (ADR-0012).
-        st.session_state._cv_scored += 1
-        if _truth == _cvr["group"]:
-            st.session_state._cv_hits += 1
-    del st.session_state._cv_task_idx[_cvi]
 
 
 # ══ 사이드바 ══════════════════════════════════════════════════════
@@ -1059,22 +1234,11 @@ with st.sidebar:
         '<div style="padding:.8rem 0 .4rem">'
         '<div style="font-size:1.5rem;font-weight:900;background:linear-gradient(135deg,#60a5fa,#a78bfa);'
         '-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text">⚾ PitchIQ</div>'
-        '<div style="font-size:.78rem;color:#475569;margin-top:.05rem">MLB 투구 예측 시스템</div>'
+        '<div style="font-size:.78rem;color:#8a99b0;margin-top:.05rem">MLB 투구 예측 시스템</div>'
         '</div>', unsafe_allow_html=True)
 
     st.markdown('<div class="stitch-divider"></div>', unsafe_allow_html=True)
 
-    # 프레임 샘플링을 학습과 맞춘 뒤(TS-028) 앱 정확도가 0.410 -> 0.767로 올라
-    # 실험실 수치(0.783)와 같아졌다. 다만 투구마다 YOLO를 돌리므로 재생이 무거워질 수
-    # 있어 기본은 꺼둔다 — 켜고 끄는 판단은 사용자에게 맡긴다.
-    st.checkbox(
-        "CV 궤적 판정",
-        key="cv_enabled",
-        help="Statcast 없이 영상 궤적만으로 속구/변화구를 판정한다. 학습에 쓰지 않은 "
-             "경기에서 정확도 76.7%(기준선 58.1%). 투구마다 YOLO를 돌려 재생이 무거워질 수 있다.",
-    )
-
-    st.markdown('<div class="stitch-divider"></div>', unsafe_allow_html=True)
 
     # 경기 진행 요약 (로드된 경우)
     if loaded:
@@ -1084,8 +1248,8 @@ with st.sidebar:
         _home_s = cur["home_score"]
         st.markdown(
             '<div class="sidebar-card">'
-            '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.4rem">경기 현황</p>'
-            f'<div style="font-size:.85rem;line-height:2.1;color:#64748b">'
+            '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a99b0;margin-bottom:.4rem">경기 현황</p>'
+            f'<div style="font-size:.85rem;line-height:2.1;color:#a6b3c6">'
             f'<div>{cur["away_team"]} <span style="color:#e2e8f0;font-weight:700">{_away_s}</span>'
             f' : <span style="color:#e2e8f0;font-weight:700">{_home_s}</span> {cur["home_team"]}</div>'
             f'<div>이닝 <span style="color:#93c5fd;font-weight:700">{half} {cur["inning"]}회</span></div>'
@@ -1094,18 +1258,56 @@ with st.sidebar:
             f'<div>진행 <span style="color:#a78bfa;font-weight:700">{c_idx}/{len(pitches)}구</span></div>'
             f'</div></div>', unsafe_allow_html=True)
 
-    # 구종 범례
+    # 구종 범례 — 마우스를 올리면 설명이 펼쳐진다.
+    #
+    # 떠 있는 팝오버로 안 만들었다. 사이드바가 좁고 overflow가 걸려 있어 옆으로 띄우면
+    # 잘린다. 자리에서 펼치면 레이아웃이 밀리지만 안 잘린다.
+    _seen_types = {p["pitch_type"] for p in pitches} if loaded else set()
     _legend_rows = "".join(
-        f'<div style="display:flex;align-items:center;gap:.35rem;margin-bottom:.2rem;font-size:.8rem">'
-        f'<div style="width:7px;height:7px;border-radius:50%;background:{_m["color"]};flex-shrink:0"></div>'
-        f'<span style="color:#64748b;width:2rem">{_c}</span>'
-        f'<span style="color:#475569">{_m["name"]}</span></div>'
+        f'<div class="pl-row">'
+        f'<div class="pl-head">'
+        f'{_pitch_arc(_c, 26)}'
+        f'<span class="pl-code" style="color:{_m["color"]}">{_c}</span>'
+        f'<span class="pl-name">{_m["name"]}</span>'
+        f'{"<span class=pl-dot></span>" if _c in _seen_types else ""}'
+        f'</div>'
+        f'<div class="pl-card">'
+        f'<div class="pl-fig">{_pitch_arc_big(_c)}</div>'
+        f'<div class="pl-en">{_m["en"]}</div>'
+        f'<div class="pl-speed">{_m["speed"]} <span>mph</span></div>'
+        f'<div class="pl-note">{_m["note"]}</div>'
+        f'</div></div>'
         for _c, _m in list(PITCH_META.items())[:10] if _c != "OTHER"
     )
     st.markdown(
+        '<style>'
+        '.pl-row{border-radius:8px;padding:.16rem .3rem;transition:background .18s ease}'
+        '.pl-row:hover{background:rgba(59,130,246,.07)}'
+        '.pl-head{display:flex;align-items:center;gap:.4rem;font-size:.8rem}'
+        '.pl-code{font-weight:700;width:1.9rem;font-size:.72rem;letter-spacing:.02em}'
+        '.pl-name{color:#a6b3c6}'
+        '.pl-dot{width:5px;height:5px;border-radius:50%;background:#4dbd8a;'
+        'margin-left:auto;flex-shrink:0}'
+        '.pl-card{max-height:0;opacity:0;overflow:hidden;'
+        'transition:max-height .28s ease,opacity .2s ease}'
+        '.pl-row:hover .pl-card{max-height:330px;opacity:1}'
+        '.pl-fig{margin:.5rem 0 .35rem;padding:.5rem .1rem .2rem;border-radius:8px;'
+        'background:rgba(10,16,30,.45)}'
+        '.pl-en{margin-top:.3rem;font-size:.62rem;letter-spacing:.06em;'
+        'text-transform:uppercase;color:#8a99b0}'
+        '.pl-speed{font-size:.9rem;font-weight:800;color:#cbd5e1;line-height:1.3}'
+        '.pl-speed span{font-size:.6rem;font-weight:600;color:#8a99b0}'
+        '.pl-note{font-size:.68rem;line-height:1.55;color:#a6b3c6;'
+        'padding-bottom:.3rem;word-break:keep-all}'
+        '</style>'
         '<div class="sidebar-card">'
-        '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.3rem">구종 범례</p>'
-        f'{_legend_rows}</div>', unsafe_allow_html=True)
+        '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a99b0;margin-bottom:.3rem">구종 범례</p>'
+        f'{_legend_rows}'
+        '<p style="margin-top:.4rem;font-size:.6rem;color:#6b7a91;line-height:1.5">'
+        '마우스를 올리면 설명이 나온다 · '
+        '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;'
+        'background:#4dbd8a;vertical-align:middle"></span> 이 경기에 나온 구종</p>'
+        '</div>', unsafe_allow_html=True)
 
 
 def _render_landing_hero() -> None:
@@ -1149,21 +1351,21 @@ if loaded:
     balls_html   = _seg_dots(cur["balls"],   3, "#3b82f6")
     strikes_html = _seg_dots(cur["strikes"], 2, "#f59e0b")
     outs_html    = _seg_dots(cur["outs"],    2, "#ef4444")
-    _aw_color    = TEAM_ACCENTS.get(aw, "#94a3b8")
-    _hw_color    = TEAM_ACCENTS.get(hw, "#94a3b8")
+    _aw_color    = TEAM_ACCENTS.get(aw, "#cbd5e1")
+    _hw_color    = TEAM_ACCENTS.get(hw, "#cbd5e1")
 
     st.markdown(
-        f'<div class="scoreboard">'
+        f'<div class="scoreboard" style="--away:{_aw_color};--home:{_hw_color}">'
         # 폭을 제한하고 가운데 정렬한다. space-between으로 풀어두면 와이드 화면에서
         # 두 팀 점수가 양 끝으로 밀려나고 가운데 900px가 빈 영역이 된다.
         f'<div style="display:flex;align-items:center;justify-content:center;'
         f'gap:clamp(1.5rem,6vw,5rem);max-width:760px;margin:0 auto">'
         # 원정팀
         f'<div style="text-align:center;min-width:72px">'
-        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">원정</div>'
+        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a6b3c6">원정</div>'
         f'<div style="font-size:.8rem;font-weight:800;color:{_aw_color};letter-spacing:.08em;'
         f'border-bottom:2px solid {_aw_color};padding-bottom:.15rem;display:inline-block">{aw}</div>'
-        f'<div class="team-score" style="color:{"#f1f5f9" if aws >= hws else "#475569"}">{aws}</div>'
+        f'<div class="team-score" style="color:{"#f1f5f9" if aws >= hws else "#8a99b0"}">{aws}</div>'
         f'</div>'
         # 중앙 (이닝 + 카운트)
         f'<div style="text-align:center;flex:1">'
@@ -1186,10 +1388,10 @@ if loaded:
         f'</div></div>'
         # 홈팀
         f'<div style="text-align:center;min-width:72px">'
-        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#64748b">홈</div>'
+        f'<div style="font-size:.58rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#a6b3c6">홈</div>'
         f'<div style="font-size:.8rem;font-weight:800;color:{_hw_color};letter-spacing:.08em;'
         f'border-bottom:2px solid {_hw_color};padding-bottom:.15rem;display:inline-block">{hw}</div>'
-        f'<div class="team-score" style="color:{"#f1f5f9" if hws >= aws else "#475569"}">{hws}</div>'
+        f'<div class="team-score" style="color:{"#f1f5f9" if hws >= aws else "#8a99b0"}">{hws}</div>'
         f'</div>'
         f'</div></div>',
         unsafe_allow_html=True)
@@ -1337,12 +1539,12 @@ if loaded:
         else:
             _current_video_time = None
             st.markdown(
-                '<div style="background:rgba(8,14,26,.9);border:1.5px dashed rgba(59,130,246,.2);'
+                '<div style="background:rgba(23,32,54,.9);border:1.5px dashed rgba(59,130,246,.2);'
                 'border-radius:12px;height:300px;display:flex;flex-direction:column;'
                 'align-items:center;justify-content:center;gap:.6rem">'
                 '<div style="font-size:2.8rem">🎬</div>'
-                '<div style="color:#334155;font-size:.85rem">사이드바에서 YouTube URL을 입력하거나 영상을 업로드하세요</div>'
-                '<div style="color:#1e293b;font-size:.72rem">YOLO가 자동으로 투구를 감지합니다</div>'
+                '<div style="color:#6b7a91;font-size:.85rem">사이드바에서 YouTube URL을 입력하거나 영상을 업로드하세요</div>'
+                '<div style="color:#46536b;font-size:.72rem">YOLO가 자동으로 투구를 감지합니다</div>'
                 '</div>', unsafe_allow_html=True)
 
         if loaded:
@@ -1372,7 +1574,7 @@ if loaded:
                 st.caption(f"{_pitch_label}{_sync_note}")
 
             # 슬라이더 (투구 타임라인)
-            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#8a99b0;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
             # 이동은 전부 on_click/on_change 콜백으로 처리한다.
             #
             # st.button()의 반환값으로 처리하면 안 된다. 이 앱은 영상 재생 중 여러
@@ -1431,7 +1633,7 @@ if loaded:
                           on_click=_goto_pitch_cb, args=(c_idx + 1,))
 
             # 최근 투구 리스트
-            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
+            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#8a99b0;letter-spacing:.09em;text-transform:uppercase;margin:.4rem 0 .15rem">최근 투구</p>', unsafe_allow_html=True)
             _start = max(0, c_idx - 7)
             _row_desc_map = {
                 "called_strike": "스트라이크", "swinging_strike": "헛스윙",
@@ -1443,7 +1645,7 @@ if loaded:
                 _m   = PITCH_META.get(_pt, PITCH_META["OTHER"])
                 _spd = f'{_r["release_speed"]:.1f}' if _r["release_speed"] else "—"
                 _is_c = _r["pitch_idx"] == c_idx
-                _bg  = "rgba(59,130,246,.1)" if _is_c else "rgba(8,14,26,.6)"
+                _bg  = "rgba(59,130,246,.1)" if _is_c else "rgba(23,32,54,.6)"
                 _bdr = "1px solid rgba(59,130,246,.3)" if _is_c else "1px solid rgba(148,163,184,.07)"
                 _ev  = _r["events"] if _r["events"] and _r["events"] not in ("nan", "None", "") else ""
                 _ev_html = f' <span style="color:#34d399;font-size:.65rem">[{_ev}]</span>' if _ev else ""
@@ -1452,11 +1654,13 @@ if loaded:
                 st.markdown(
                     f'<div class="pitch-row" style="background:{_bg};border:{_bdr}">'
                     f'<div style="display:flex;align-items:center;gap:.5rem;width:100%">'
-                    f'<span style="color:#475569;width:1.4rem;font-size:.68rem;font-weight:{"700" if _is_c else "400"}">'
+                    f'<span style="color:#8a99b0;width:1.4rem;font-size:.68rem;font-weight:{"700" if _is_c else "400"}">'
                     f'#{_r["pitch_idx"]+1}</span>'
-                    f'<span style="font-weight:700;color:{_m["color"]};width:2.8rem">{_m["emoji"]} {_pt}</span>'
-                    f'<span style="color:#64748b;font-size:.68rem">{_spd} mph</span>'
-                    f'<span style="color:#64748b;font-size:.65rem;margin-left:auto">'
+                    f'<span style="display:inline-flex;align-items:center;gap:.3rem;'
+                    f'font-weight:700;color:{_m["color"]};width:3.4rem">'
+                    f'{_pitch_arc(_pt, 22)}{_pt}</span>'
+                    f'<span style="color:#a6b3c6;font-size:.68rem">{_spd} mph</span>'
+                    f'<span style="color:#a6b3c6;font-size:.65rem;margin-left:auto">'
                     f'{_r["inning_topbot"][0]}{_r["inning"]}회 {_r["balls"]}-{_r["strikes"]}'
                     f'{_ev_html}</span>'
                     f'</div>'
@@ -1469,7 +1673,7 @@ if loaded:
         if not loaded:
             st.markdown(
                 '<div style="height:400px;display:flex;align-items:center;justify-content:center;'
-                'color:#334155;font-size:.85rem;border:1px dashed rgba(59,130,246,.1);border-radius:12px">'
+                'color:#6b7a91;font-size:.85rem;border:1px dashed rgba(59,130,246,.1);border-radius:12px">'
                 '경기를 먼저 로드하세요</div>', unsafe_allow_html=True)
         else:
             cur  = pitches[c_idx]
@@ -1494,8 +1698,8 @@ if loaded:
                     f'<div style="font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
                     f'color:#a78bfa;margin-bottom:.3rem">🔄 투수 교체</div>'
                     f'<div style="display:flex;align-items:center;gap:.55rem;flex-wrap:wrap">'
-                    f'<span style="color:#94a3b8;font-size:.9rem;text-decoration:line-through">{_old_p}</span>'
-                    f'<span style="color:#475569;font-size:1rem;font-weight:300">→</span>'
+                    f'<span style="color:#cbd5e1;font-size:.9rem;text-decoration:line-through">{_old_p}</span>'
+                    f'<span style="color:#8a99b0;font-size:1rem;font-weight:300">→</span>'
                     f'<span style="color:#60a5fa;font-weight:800;font-size:1.05rem">{_new_p}</span>'
                     f'<span style="background:rgba(96,165,250,.15);color:#93c5fd;border:1px solid rgba(96,165,250,.3);'
                     f'border-radius:999px;padding:.1rem .45rem;font-size:.68rem;font-weight:700">{_new_hand}투</span>'
@@ -1506,12 +1710,12 @@ if loaded:
                 _new_bh   = cur["batter_hand"]
                 _bat_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
                 st.markdown(
-                    f'<div style="background:rgba(15,23,42,.8);border:1px solid rgba(52,211,153,.35);'
+                    f'<div style="background:rgba(30,41,66,.8);border:1px solid rgba(52,211,153,.35);'
                     f'border-radius:12px;padding:.65rem 1rem;margin-bottom:.55rem">'
                     f'<div style="font-size:.68rem;font-weight:700;letter-spacing:.12em;text-transform:uppercase;'
                     f'color:#34d399;margin-bottom:.25rem">⚾ 타자 교체</div>'
                     f'<div style="font-size:1.05rem;font-weight:800;color:#e2e8f0">{_new_b}</div>'
-                    f'<div style="font-size:.72rem;color:#64748b;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
+                    f'<div style="font-size:.72rem;color:#a6b3c6;margin-top:.1rem">{_bat_team} · {_new_bh}타</div>'
                     f'</div>',
                     unsafe_allow_html=True)
 
@@ -1520,25 +1724,34 @@ if loaded:
             st.markdown(
                 f'<div class="panel-secondary">'
                 f'<div class="panel-title">투수 · 타자</div>'
-                f'<div style="display:flex;gap:.6rem;margin-bottom:.5rem">'
-                f'<div style="flex:1">'
-                f'<div style="font-size:.68rem;color:#475569;margin-bottom:.1rem">투수</div>'
-                f'<div style="font-size:1rem;font-weight:800;color:#60a5fa">{cur["pitcher_name"]}</div>'
-                f'<div style="font-size:.72rem;color:#475569">투구폼 {cur["pitcher_hand"]}</div>'
+                f'<div style="display:flex;flex-direction:column;gap:.9rem;margin-bottom:1rem">'
+                f'<div style="border-left:3px solid #60a5fa;padding-left:.7rem">'
+                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
+                f'color:#93a1b6;margin-bottom:.15rem">투수</div>'
+                f'<div style="font-size:1.32rem;font-weight:800;color:#60a5fa;line-height:1.25">'
+                f'{cur["pitcher_name"]}</div>'
+                f'<div style="font-size:.82rem;color:#a6b3c6">{cur["pitcher_hand"]}구</div>'
                 f'</div>'
-                f'<div style="flex:1">'
-                f'<div style="font-size:.68rem;color:#475569;margin-bottom:.1rem">타자 ({batting_team})</div>'
-                f'<div style="font-size:1rem;font-weight:800;color:#e2e8f0">{cur["batter_name"]}</div>'
-                f'<div style="font-size:.72rem;color:#475569">{cur["batter_hand"]}타</div>'
+                f'<div style="border-left:3px solid #cbd5e1;padding-left:.7rem">'
+                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
+                f'color:#93a1b6;margin-bottom:.15rem">타자 · {batting_team}</div>'
+                f'<div style="font-size:1.32rem;font-weight:800;color:#f1f5f9;line-height:1.25">'
+                f'{cur["batter_name"]}</div>'
+                f'<div style="font-size:.82rem;color:#a6b3c6">{cur["batter_hand"]}타</div>'
                 f'</div></div>'
-                # 주자 다이아몬드
-                f'<div style="display:flex;align-items:center;gap:.8rem">'
+                # 주자 — 내야 그림 하나로 충분하다. 옆에 "○ 1루" 목록을 두면 같은 정보를
+                # 두 번 읽게 되고, 그림이 그만큼 작아진다.
+                f'<div style="display:flex;align-items:center;gap:1rem">'
                 f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"])}'
-                f'<div style="font-size:.75rem;color:#64748b;line-height:1.8">'
-                f'{"🟡 1루" if cur["on_1b"] else "○ 1루"}<br>'
-                f'{"🟡 2루" if cur["on_2b"] else "○ 2루"}<br>'
-                f'{"🟡 3루" if cur["on_3b"] else "○ 3루"}'
-                f'</div></div></div>',
+                f'<div>'
+                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
+                f'color:#93a1b6">주자</div>'
+                f'<div style="font-size:1.15rem;font-weight:800;color:#fbbf24;line-height:1.4">'
+                f'{sum((cur["on_1b"], cur["on_2b"], cur["on_3b"])) or "없음"}'
+                f'{"명" if any((cur["on_1b"], cur["on_2b"], cur["on_3b"])) else ""}</div>'
+                f'<div style="font-size:.78rem;color:#a6b3c6">'
+                f'{" · ".join(n for n, on in (("1루", cur["on_1b"]), ("2루", cur["on_2b"]), ("3루", cur["on_3b"])) if on) or "루상 비어 있음"}'
+                f'</div></div></div></div>',
                 unsafe_allow_html=True)
 
             # ── 현재 타석 상황 (투구 결과 실시간) ──
@@ -1572,7 +1785,7 @@ if loaded:
             if _ab_pitches:
                 _dots_html = ""
                 for _ap in _ab_pitches:
-                    _dinfo = _desc_map.get(_ap["description"], ("", "#475569"))
+                    _dinfo = _desc_map.get(_ap["description"], ("", "#8a99b0"))
                     _dot_c = _dinfo[1]
                     _dots_html += (
                         f'<span title="{_dinfo[0]}" style="display:inline-block;width:9px;height:9px;'
@@ -1580,14 +1793,14 @@ if loaded:
                     )
                 st.markdown(
                     f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
-                    f'<span style="font-size:.68rem;color:#475569;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
+                    f'<span style="font-size:.68rem;color:#8a99b0;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
                     f'<div>{_dots_html}</div>'
                     f'</div>',
                     unsafe_allow_html=True)
 
             # ── 방금 던진 구종 ──
             st.markdown('<div class="card-badge card-badge-actual">실측</div>', unsafe_allow_html=True)
-            st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#475569;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
+            st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a99b0;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
 
             _vpd = st.session_state.get("video_pitch_data", [])
             _ocr_i = c_idx - 1 if c_idx > 0 else -1
@@ -1609,7 +1822,7 @@ if loaded:
             if prev and _display_code:
                 _m    = PITCH_META.get(_display_code, PITCH_META["OTHER"])
                 _desc_raw  = prev.get("description", "")
-                _desc_info = _desc_map.get(_desc_raw, (_desc_raw, "#64748b"))
+                _desc_info = _desc_map.get(_desc_raw, (_desc_raw, "#a6b3c6"))
                 _desc_kor, _desc_col = _desc_info
                 _ev   = prev["events"] if prev["events"] not in ("nan", "None", "", None) else ""
                 _ev_kor = _ev_map.get(_ev, _ev)
@@ -1631,14 +1844,17 @@ if loaded:
                         st.session_state._streak_calc_idx = c_idx
 
                 st.markdown(
-                    f'<div class="pitch-card {_reveal_cls}" style="background:rgba(15,23,42,.6);border-color:{_m["color"]}44">'
+                    f'<div class="pitch-card {_reveal_cls}" style="background:rgba(30,41,66,.6);border-color:{_m["color"]}44">'
                     f'<div style="display:flex;align-items:center;gap:.8rem">'
-                    f'<div style="font-size:2.2rem;line-height:1">{_m["emoji"]}</div>'
+                    f'<div style="display:flex;align-items:center;justify-content:center;'
+                    f'width:3.1rem;height:2.6rem;border-radius:10px;'
+                    f'background:{_m["color"]}14;border:1px solid {_m["color"]}33">'
+                    f'{_pitch_arc(_display_code, 34)}</div>'
                     f'<div style="flex:1">'
                     f'<div class="pitch-code" style="color:{_m["color"]}">{_display_code}</div>'
                     f'<div class="pitch-name">{_ocr_type_str or _m["name"]}</div>'
                     f'<div style="margin-top:.2rem;display:flex;align-items:center;flex-wrap:wrap;gap:.3rem">'
-                    f'<span style="color:#64748b;font-size:.85rem;font-weight:600">{_spd}</span>'
+                    f'<span style="color:#a6b3c6;font-size:.85rem;font-weight:600">{_spd}</span>'
                     f'<span style="background:{_desc_col}22;color:{_desc_col};border:1px solid {_desc_col}44;'
                     f'border-radius:999px;padding:.08rem .4rem;font-size:.68rem;font-weight:700">{_desc_kor}</span>'
                     + (f'<span style="color:#34d399;font-size:.72rem;font-weight:700">[{_ev_kor}]</span>' if _ev_kor else "")
@@ -1648,88 +1864,76 @@ if loaded:
             else:
                 st.markdown(
                     '<div class="pitch-card" style="min-height:70px;display:flex;align-items:center;'
-                    'justify-content:center;background:rgba(8,14,26,.5);border-color:rgba(59,130,246,.1)">'
-                    '<span style="color:#475569;font-size:.9rem">경기 로드 후 재생</span></div>',
+                    'justify-content:center;background:rgba(23,32,54,.5);border-color:rgba(59,130,246,.1)">'
+                    '<span style="color:#8a99b0;font-size:.9rem">경기 로드 후 재생</span></div>',
                     unsafe_allow_html=True)
 
             # ── 영상만으로 낸 구종 (CV 궤적 판정) ──
             # 위 실측은 Statcast API에서 왔다. 아래는 API 없이 영상 궤적만으로 낸 값이라
             # 둘을 나란히 두면 CV 적중률이 화면에서 바로 채점된다.
-            _cv_vd = st.session_state._cv_verdicts.get(_ocr_i)
-            _cv_running = _ocr_i in st.session_state._cv_task_idx
+            #
+            # 재생 중에 돌리지 않는다. scripts/batch_cv_verdicts.py가 미리 판정해 둔 것을
+            # 읽기만 한다. 예전엔 투구마다 YOLO를 돌려 재생이 무거웠고, 시연 중 실제로 본
+            # 투구만 채점되므로 표본이 n=43에 머물렀다. 사이드바 토글도 같이 없앴다 —
+            # 부하가 없으면 끄고 켤 이유가 없다.
+            _cv_all  = _load_cv_verdicts()
+            _cv_vd   = _cv_all.get(_ocr_i)
+            _cv_stat = _cv_accuracy(_cv_all, pitches) if _cv_all else None
 
-            # 판정 발주: 방금 던진 구가 있고, 아직 결과도 진행 중인 것도 없을 때 한 번만.
-            _cv_path  = st.session_state.get("_local_video_path")
-            # 현재 재생 시각이 아니라 **스캔이 잡은 실제 투구 시각**으로 쏜다.
-            # 투구 인덱스는 영상 길이에 비례 매핑되므로(_target_idx), 인덱스가 넘어간
-            # 순간의 재생 시각에 공이 날아가고 있다는 보장이 없다. 오버레이가 뜬 시각은
-            # 실제로 투구가 있었던 시각이다.
-            _cv_now   = st.session_state.get("_vid_t")
-            _cv_times = st.session_state.get("video_pitch_times") or []
-            _cv_past  = [t for t in _cv_times if _cv_now is not None and t <= _cv_now]
-            _cv_vid_t = max(_cv_past) if _cv_past else None
-            if (st.session_state.get("cv_enabled")
-                    and prev and _ocr_i >= 0 and _cv_vd is None and not _cv_running
-                    and _cv_path and os.path.exists(_cv_path)
-                    and _cv_vid_t is not None):
-                _cv_tid = _start_cv_check(_cv_path, _cv_vid_t, _ocr_i)
-                st.session_state._cv_task_idx[_ocr_i] = _cv_tid
-                _cv_running = True
-
-            if _cv_vd:
-                _cv_group = _cv_vd.get("group")
-                if _cv_group:
-                    _cv_col  = "#60a5fa" if _cv_group == "FASTBALL" else "#c084fc"
-                    _cv_kor  = "속구 계열" if _cv_group == "FASTBALL" else "변화구 계열"
-                    _cv_conf = _cv_vd.get("confidence", 0.0)
-                    _cv_mark = ""
-                    if _cv_vd.get("truth"):
-                        _cv_ok = _cv_vd["truth"] == _cv_group
-                        _cv_mark = (f'<span style="font-size:.68rem;font-weight:700;margin-left:.35rem;'
-                                    f'color:{"#34d399" if _cv_ok else "#f87171"}">'
-                                    f'{"✓" if _cv_ok else "✗"}</span>')
-                    _cv_body = (
-                        f'<span style="color:{_cv_col};font-weight:800;font-size:.9rem">{_cv_kor}</span>'
-                        f'<span style="color:#64748b;font-size:.72rem;margin-left:.4rem">'
-                        f'{_cv_conf:.0%} · 궤적 {_cv_vd.get("n_points", 0)}점</span>'
-                        + _cv_mark
-                    )
-                else:
-                    # 궤적을 못 잡은 14%를 숨기지 않는다. 숨기면 앱 정확도가 실제보다 좋아 보인다.
-                    _cv_why = {"no_detections": "공 미감지", "no_trajectory": "궤적 없음",
-                               "too_few_points": "궤적 짧음", "error": "오류"}.get(
-                                   _cv_vd.get("reason", ""), _cv_vd.get("reason", ""))
-                    _cv_body = (f'<span style="color:#64748b;font-size:.82rem">판정 불가</span>'
-                                f'<span style="color:#475569;font-size:.7rem;margin-left:.35rem">{_cv_why}</span>')
-            elif _cv_running:
-                _cv_body = '<span style="color:#475569;font-size:.8rem">궤적 분석 중…</span>'
-            elif not st.session_state.get("cv_enabled"):
-                _cv_body = ('<span style="color:#334155;font-size:.8rem">'
-                            '꺼짐 — 사이드바에서 켠다</span>')
+            if _cv_vd and _cv_vd.get("group"):
+                _cv_group = _cv_vd["group"]
+                _cv_col   = "#60a5fa" if _cv_group == "FASTBALL" else "#c084fc"
+                _cv_kor   = "속구 계열" if _cv_group == "FASTBALL" else "변화구 계열"
+                _cv_truth = _statcast_to_two_class(prev["pitch_type"]) if prev else None
+                _cv_mark  = ""
+                if _cv_truth:
+                    _cv_ok   = _cv_truth == _cv_group
+                    _cv_mark = (f'<span style="font-size:.68rem;font-weight:700;margin-left:.35rem;'
+                                f'color:{"#34d399" if _cv_ok else "#f87171"}">'
+                                f'{"적중" if _cv_ok else "오답"}</span>')
+                _cv_body = (
+                    f'<span style="color:{_cv_col};font-weight:800;font-size:.9rem">{_cv_kor}</span>'
+                    f'<span style="color:#a6b3c6;font-size:.72rem;margin-left:.4rem">'
+                    f'{_cv_vd.get("confidence", 0):.0%} · 궤적 {_cv_vd.get("n_points", 0)}점</span>'
+                    + _cv_mark)
+            elif _cv_vd:
+                # 궤적을 못 잡은 건 숨기지 않는다. 숨기면 정확도가 실제보다 좋아 보인다.
+                _cv_why = {"no_detections": "공 미감지", "no_trajectory": "궤적 없음",
+                           "too_few_points": "궤적 짧음"}.get(
+                               _cv_vd.get("reason", ""), _cv_vd.get("reason", "") or "사유 없음")
+                _cv_body = (f'<span style="color:#a6b3c6;font-size:.82rem">판정 불가</span>'
+                            f'<span style="color:#8a99b0;font-size:.7rem;margin-left:.35rem">{_cv_why}</span>')
+            elif not _cv_all:
+                _cv_body = ('<span style="color:#6b7a91;font-size:.78rem">'
+                            '사전 판정 파일이 없다 — scripts/batch_cv_verdicts.py</span>')
             else:
-                _cv_body = '<span style="color:#334155;font-size:.8rem">대기</span>'
+                _cv_body = ('<span style="color:#6b7a91;font-size:.78rem">'
+                            '판정 대상 아님 — 이 투구는 구속 표시가 안 잡혔다</span>')
 
-            _cv_n, _cv_h = st.session_state._cv_scored, st.session_state._cv_hits
-            _cv_rate = (f'{_cv_h / _cv_n:.0%} ({_cv_h}/{_cv_n})' if _cv_n else '—')
-            # 학습에 쓰지 않은 경기(775300)의 원본 중계 영상에서 정확도 76.7% / AUC 0.780이다
-            # (n=43, 기준선 58.1%). 클립 단위 검증 78.3%와 사실상 같다 — 프레임 샘플링을
-            # 학습과 맞추고 나서 도메인 격차가 사라졌다 (TS-028). 실측 근거를 화면에 함께 적는다.
+            if _cv_stat and _cv_stat["acc"] is not None:
+                _cv_rate = (f'{_cv_stat["acc"]:.1%} ({_cv_stat["hits"]}/{_cv_stat["scored"]})')
+                _cv_foot = (f'경기 전체 사전 판정 · 대상 {_cv_stat["attempted"]}구 중 '
+                            f'{_cv_stat["decided"]}구 판정({_cv_stat["decided"]/_cv_stat["attempted"]:.0%}) · '
+                            f'채점 {_cv_stat["scored"]}구 (OFFSPEED 제외) · '
+                            f'기준선 {_cv_stat["baseline"]:.1%}')
+            else:
+                _cv_rate = '—'
+                _cv_foot = '미학습 경기 원본 영상 · 속구 vs 변화구 2분류'
+
             st.markdown(
                 f'<div style="margin-top:.45rem;padding:.5rem .65rem;border-radius:10px;'
-                f'background:rgba(8,14,26,.5);border:1px solid rgba(77,189,138,.18)">'
+                f'background:rgba(23,32,54,.5);border:1px solid rgba(77,189,138,.18)">'
                 f'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:.5rem">'
                 f'<span style="font-size:.62rem;font-weight:700;letter-spacing:.08em;'
-                f'text-transform:uppercase;color:#475569">영상만으로 · CV'
+                f'text-transform:uppercase;color:#8a99b0">영상만으로 · CV'
                 f'<span style="margin-left:.35rem;padding:.05rem .3rem;border-radius:4px;'
                 f'background:rgba(77,189,138,.14);color:#4dbd8a;font-size:.58rem;'
-                f'letter-spacing:0">검증됨</span></span>'
-                f'<span style="font-size:.62rem;color:#475569">이번 세션 {_cv_rate}</span>'
+                f'letter-spacing:0">사전 판정</span></span>'
+                f'<span style="font-size:.66rem;font-weight:700;color:#4dbd8a">{_cv_rate}</span>'
                 f'</div>'
                 f'<div style="margin-top:.2rem">{_cv_body}</div>'
-                f'<div style="margin-top:.3rem;font-size:.58rem;color:#3f4a5c;line-height:1.5">'
-                f'미학습 경기 원본 영상 정확도 76.7% · AUC 0.780 (n=43, 기준선 58.1%) — '
-                f'클립 단위 검증 78.3%와 동등'
-                f'</div>'
+                f'<div style="margin-top:.3rem;font-size:.58rem;color:#7b8aa1;line-height:1.5">'
+                f'{_cv_foot}</div>'
                 f'</div>',
                 unsafe_allow_html=True)
 
@@ -1755,7 +1959,7 @@ if loaded:
                     f'<div class="card-badge card-badge-pred">예측 · {_pred_basis}</div>',
                     unsafe_allow_html=True)
                 st.markdown(
-                    f'<div class="pitch-card pred-hero card-reveal" style="background:linear-gradient(135deg,rgba(15,23,42,.8),'
+                    f'<div class="pitch-card pred-hero card-reveal" style="background:linear-gradient(135deg,rgba(30,41,66,.8),'
                     f'rgba(46,27,75,.4));border-color:rgba(167,139,250,.3)">'
                     f'<div style="display:flex;align-items:center;gap:.8rem">'
                     f'<div class="conf-gauge" style="--pct:{_cf*100};--gauge-color:{_cc}">'
@@ -1767,7 +1971,7 @@ if loaded:
                     f'<div class="pitch-name">{_nm["name"]}</div>'
                     f'<div style="margin-top:.2rem">'
                     f'<span style="color:{_cc};font-size:1.2rem;font-weight:800">{_cf:.0%}</span>'
-                    f'<span style="color:#475569;font-size:.72rem;margin-left:.2rem">신뢰도</span>'
+                    f'<span style="color:#8a99b0;font-size:.72rem;margin-left:.2rem">신뢰도</span>'
                     f'</div></div></div></div>',
                     unsafe_allow_html=True)
 
@@ -1788,7 +1992,7 @@ if loaded:
                     marker=dict(color=colors, opacity=0.82,
                                 line=dict(color="rgba(255,255,255,.04)", width=1)),
                     text=[f"{v:.0%}" for v in vals], textposition="outside",
-                    textfont=dict(size=10, color="#94a3b8"),
+                    textfont=dict(size=10, color="#cbd5e1"),
                     customdata=list(zip(codes, _pitch_kor_names)),
                     hovertemplate="<b>%{customdata[0]} %{customdata[1]}</b><br>확률: %{x:.1%}<extra></extra>",
                 ))
@@ -1798,9 +2002,9 @@ if loaded:
                     height=max(120, 26 * len(codes) + 24),
                     bargap=0.28,
                     yaxis=dict(autorange="reversed",   # 확률 높은 구종이 위로
-                               tickfont=dict(size=10, color="#94a3b8"),
+                               tickfont=dict(size=10, color="#cbd5e1"),
                                gridcolor="rgba(0,0,0,0)", zeroline=False),
-                    xaxis=dict(tickformat=".0%", tickfont=dict(size=8, color="#475569"),
+                    xaxis=dict(tickformat=".0%", tickfont=dict(size=8, color="#8a99b0"),
                                gridcolor="rgba(148,163,184,.06)", zeroline=False,
                                range=[0, max(vals) * 1.25 if vals else 1]),
                 )
@@ -1818,9 +2022,9 @@ if loaded:
                     _plab = [f'{c} {PITCH_META.get(c,PITCH_META["OTHER"])["name"]}' for c in _pc]
                     fig2  = go.Figure(go.Pie(
                         labels=_plab, values=_pv,
-                        marker=dict(colors=_pcol, line=dict(color="#080e1a", width=2)),
+                        marker=dict(colors=_pcol, line=dict(color="#131c30", width=2)),
                         hole=0.55, textinfo="label+percent",
-                        textfont=dict(size=7.5, color="#94a3b8"),
+                        textfont=dict(size=7.5, color="#cbd5e1"),
                         hovertemplate="%{label}: %{value}구 (%{percent})<extra></extra>",
                     ))
                     fig2.update_layout(
@@ -1829,7 +2033,7 @@ if loaded:
                         annotations=[dict(text=f"<b>{sum(_pv)}</b><br>구", x=0.5, y=0.5,
                                           font=dict(size=11, color="#e2e8f0"), showarrow=False)],
                     )
-                    st.markdown(f'<p style="font-size:.62rem;font-weight:700;color:#475569;letter-spacing:.09em;text-transform:uppercase;margin:.15rem 0 .1rem">{cur["pitcher_name"].split(",")[0]} 구종 분포</p>', unsafe_allow_html=True)
+                    st.markdown(f'<p style="font-size:.62rem;font-weight:700;color:#8a99b0;letter-spacing:.09em;text-transform:uppercase;margin:.15rem 0 .1rem">{cur["pitcher_name"].split(",")[0]} 구종 분포</p>', unsafe_allow_html=True)
                     st.plotly_chart(fig2, use_container_width=True, config={"displayModeBar": False})
 
 
@@ -1856,9 +2060,9 @@ if loaded and c_idx > 0:
         with _col:
             st.markdown(
                 f'<div class="stat-card">'
-                f'<div style="font-size:.7rem;color:#475569;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.28rem">{_icon}&nbsp;{_lbl}</div>'
+                f'<div style="font-size:.7rem;color:#8a99b0;text-transform:uppercase;letter-spacing:.08em;margin-bottom:.28rem">{_icon}&nbsp;{_lbl}</div>'
                 f'<div style="font-size:1.55rem;font-weight:800;color:{_vcol};line-height:1">{_val}</div>'
-                f'<div style="font-size:.7rem;color:#64748b;margin-top:.1rem">{_sub}</div>'
+                f'<div style="font-size:.7rem;color:#a6b3c6;margin-top:.1rem">{_sub}</div>'
                 f'</div>', unsafe_allow_html=True)
 
 # 오프라인 스캔 폴링 (2초마다 완료 여부 확인)
@@ -1868,14 +2072,6 @@ if _poll_stid and _scan_tasks.get(_poll_stid, {}).get("status") == "scanning":
     st.rerun()
 
 # CV 판정 폴링 — 백그라운드 결과를 화면에 올리려면 재렌더가 필요하다.
-# 궤적 판정은 프레임 수십 장에 YOLO를 돌리므로 OCR보다 느리다. 간격을 길게 잡는다.
-#
-# 조건을 "대기 목록이 비어 있지 않다"가 아니라 "실제로 처리 중인 태스크가 있다"로 둔다.
-# 앞의 조건은 태스크가 유실되면 영원히 참이 되어 재실행이 끝없이 돈다.
-if any(_cv_tasks.get(_t, {}).get("status") == "processing"
-       for _t in st.session_state.get("_cv_task_idx", {}).values()):
-    time.sleep(1.5)
-    st.rerun()
 
 # ── 포즈/OCR 태스크 폴링 — 제거함 ──
 #
