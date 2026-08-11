@@ -71,6 +71,25 @@ def test_resolve_drops_readings_that_go_backwards():
     assert [idx for _t, idx in anchors] == [9, 19]      # P:N 은 1부터, 인덱스는 0부터
 
 
+def test_resolve_keeps_readings_that_follow_a_misread():
+    # 오독 하나가 뒤따르는 정상 관측을 막으면 안 된다. 앞에서부터 그리디로 고르면
+    # 12 를 채택한 뒤 6, 7, 8 이 전부 버려진다 (실측에서 282개 중 129개가 이렇게
+    # 탈락했다). 가장 긴 사슬은 5, 6, 7, 8 이다.
+    pitches = make_pitches([1] * 40)
+    counters = [(1000.0, 5), (2000.0, 12), (3000.0, 6), (4000.0, 7), (5000.0, 8)]
+    anchors = resolve_anchors(counters, pitches, DURATION)
+    assert [idx for _t, idx in anchors] == [4, 5, 6, 7]
+
+
+def test_resolve_prefers_the_earlier_reading_when_chains_tie():
+    # 길이가 같으면 앞선 관측을 쓴다. 오독은 실측에서 전부 감소 방향이었으므로
+    # 뒤에 온 작은 값(3)이 아니라 먼저 온 값(10)을 남기는 쪽이 맞다.
+    pitches = make_pitches([1] * 40)
+    counters = [(1000.0, 10), (2000.0, 3), (3000.0, 20)]
+    anchors = resolve_anchors(counters, pitches, DURATION)
+    assert [idx for _t, idx in anchors] == [9, 19]
+
+
 def test_resolve_ignores_unreadable_entries():
     pitches = make_pitches([1] * 40)
     anchors = resolve_anchors([(1000.0, None), (2000.0, 5)], pitches, DURATION)

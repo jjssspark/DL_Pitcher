@@ -42,6 +42,14 @@ def resolve_anchors(
 
     시각과 인덱스가 함께 증가하는 것만 남긴다. OCR 오독은 실측에서 전부 감소
     방향이었고(16 -> 3, 16 -> 2), 시간이 흐르는데 투구가 되돌아갈 수는 없다.
+
+    남길 것을 앞에서부터 그리디로 고르면 안 된다. 오독 하나가 뒤따르는 정상 관측을
+    줄줄이 막는다 — 5 -> 12(오독) -> 6, 7, 8 이면 6, 7, 8 이 전부 버려진다. 실측에서
+    관측 282개 중 129개가 이렇게 탈락했다. 그래서 가장 긴 증가 사슬을 고른다
+    (같은 입력에서 앵커 153개 -> 200개).
+
+    길이가 같은 사슬이 여럿이면 앞선 관측을 쓴다. 12 -> 20 과 3 -> 20 이 둘 다
+    길이 2일 때 12 쪽을 고르는 것이 오독의 방향(감소)과 맞는다.
     """
     if not pitches or video_duration_sec <= 0:
         return []
@@ -52,19 +60,46 @@ def resolve_anchors(
         by_count.setdefault(count, []).append(idx)
 
     n = len(pitches)
-    anchors: list[Anchor] = []
+    candidates: list[Anchor] = []
     for t, counter in sorted(counters, key=lambda row: row[0]):
         if counter is None:
             continue
-        candidates = by_count.get(counter)
-        if not candidates:
+        matches = by_count.get(counter)
+        if not matches:
             continue
         guess = (t / video_duration_sec) * n
-        idx = min(candidates, key=lambda i: abs(i - guess))
-        if anchors and (t <= anchors[-1][0] or idx <= anchors[-1][1]):
-            continue                    # 시간이나 인덱스가 안 늘면 오독으로 본다
-        anchors.append((t, idx))
-    return anchors
+        candidates.append((t, min(matches, key=lambda i: abs(i - guess))))
+
+    return _longest_increasing_chain(candidates)
+
+
+def _longest_increasing_chain(candidates: list[Anchor]) -> list[Anchor]:
+    """시각과 인덱스가 함께 증가하는 가장 긴 부분수열. 동점이면 앞선 것을 쓴다.
+
+    O(n^2)이다. 실사용 입력이 관측 수백 개이고 경기당 한 번만 푸는 값이라
+    (앱에서는 캐시된다) 이 정도면 충분하다. 이분탐색판은 동점 처리를 여기처럼
+    직접 정할 수 없다.
+    """
+    size = len(candidates)
+    if size == 0:
+        return []
+
+    length = [1] * size
+    previous = [-1] * size
+    for k in range(size):
+        t_k, i_k = candidates[k]
+        for j in range(k):
+            t_j, i_j = candidates[j]
+            if t_j < t_k and i_j < i_k and length[j] + 1 > length[k]:
+                length[k] = length[j] + 1
+                previous[k] = j
+
+    end = max(range(size), key=lambda k: (length[k], -k))
+    chain: list[Anchor] = []
+    while end != -1:
+        chain.append(candidates[end])
+        end = previous[end]
+    return chain[::-1]
 
 
 def index_at_time(
