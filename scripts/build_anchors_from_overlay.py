@@ -29,6 +29,7 @@ from timeline_anchor import (  # noqa: E402
 )
 
 COUNTERS = os.path.join(ROOT, "output", "timeline", "overlay_counters.jsonl")
+SPEEDS = os.path.join(ROOT, "output", "timeline", "overlay_speeds.jsonl")
 PITCHES = os.path.join(ROOT, "output", "timeline", "pitches_775300.json")
 SCAN = os.path.join(ROOT, "streamlit_app", "fixed_demo_scan.json")
 OLD_ANCHORS = os.path.join(ROOT, "streamlit_app", "fixed_demo_anchors.json")
@@ -40,21 +41,53 @@ FOLDS = 4
 SEED = 20260811
 
 
-def counter_runs(rows: list[dict]) -> list[tuple[float, int]]:
-    """같은 P:N이 이어지는 구간을 하나로 접고 (처음 뜬 시각, 값)을 낸다.
+def counter_runs(rows: list[dict]) -> list[tuple[float, float, int]]:
+    """같은 P:N이 이어지는 구간을 하나로 접고 (처음 뜬 시각, 마지막으로 보인 시각, 값).
 
     한 투구의 P:N은 다음 투구까지 10초 넘게 떠 있고 그 사이 리플레이로 바가
     사라졌다 다시 나타나면 구간이 쪼개진다. 값이 같으면 같은 투구다.
     """
-    runs: list[tuple[float, int]] = []
+    runs: list[list] = []
     for row in sorted(rows, key=lambda r: r["start"]):
         value = row["value"]
         if value is None:
             continue
-        if runs and runs[-1][1] == value:
+        if runs and runs[-1][2] == value:
+            runs[-1][1] = float(row["end"])
             continue
-        runs.append((float(row["start"]), int(value)))
-    return runs
+        runs.append([float(row["start"]), float(row["end"]), int(value)])
+    return [(a, b, c) for a, b, c in runs]
+
+
+def retime_with_speeds(runs: list[tuple[float, float, int]],
+                       speed_starts: np.ndarray,
+                       delay: float) -> tuple[list[tuple[float, int]], np.ndarray]:
+    """P:N이 처음 보인 시각 대신 그 앞의 구속 표시가 뜬 시각을 쓴다 (TS-035).
+
+    P:N을 그대로 쓰면 인플레이 타구에서 크게 늦는다. 타구가 나오면 방송이 리플레이로
+    넘어가면서 스코어버그가 사라지고, P:N은 다음 타자가 들어설 때까지 안 보인다.
+    실측으로 4구째가 26초 늦었다 (61.5초에 87MPH가 떴는데 P:4는 87.7초).
+
+    구속 표시는 타구가 나와도 뜬다. N번째 공의 구속은 그 공 직후에 떴다가 P:N으로
+    돌아가므로, "직전 런이 끝난 뒤 ~ P:N이 뜨기 전" 구간의 **마지막** 구속 표시가
+    N번째 공의 것이다.
+
+    카운터가 정확히 1 증가한 경우에만 쓴다. 2 이상 뛰면 그 사이에 몇 구가 들어갔는지
+    알 수 없어 엉뚱한 공의 구속을 집을 수 있다 — 조건 없이 쓰면 최대 133.9초를
+    앞당겨 버렸다(조건을 걸면 54.4초).
+    """
+    out: list[tuple[float, int]] = []
+    shifts: list[float] = []
+    for i, (start, _end, value) in enumerate(runs):
+        t = start - delay
+        if i > 0 and value == runs[i - 1][2] + 1:
+            prev_end = runs[i - 1][1]
+            found = speed_starts[(speed_starts > prev_end) & (speed_starts < start)]
+            if found.size:
+                shifts.append(t - float(found[-1]))
+                t = float(found[-1])
+        out.append((t, value))
+    return out, np.array(shifts)
 
 
 def calibrate_delay(runs: list[tuple[float, int]], truth: list[float]) -> float:
@@ -126,12 +159,18 @@ def main() -> None:
     old_obs = [(float(r["t"]), r["counter"]) for r in old_rows]
 
     runs = counter_runs(rows)
-    delay = calibrate_delay(runs, truth)
+    delay = calibrate_delay([(a, c) for a, _b, c in runs], truth)
     print(f"구간 {len(rows)}개 · 판독 {sum(1 for r in rows if r['value'] is not None)}개 "
           f"· 서로 다른 P:N 런 {len(runs)}개")
-    print(f"투구 -> P:N 표시 지연 중앙값 {delay:.2f}s (구속 표시 구간)\n")
+    print(f"투구 -> P:N 표시 지연 중앙값 {delay:.2f}s (구속 표시 구간)")
 
-    observations = [(t - delay, c) for t, c in runs]
+    speed_rows = [json.loads(line) for line in open(SPEEDS) if line.strip()]
+    speed_starts = np.array(sorted(float(r["start"]) for r in speed_rows
+                                   if r.get("mph_votes", 0) >= 2))
+    observations, shifts = retime_with_speeds(runs, speed_starts, delay)
+    print(f"구속 구간 {len(speed_starts)}개 · 시각 교정 {len(shifts)}건 "
+          f"(중앙 {np.median(shifts):.1f}s · p90 {np.percentile(shifts, 90):.1f}s "
+          f"· 최대 {shifts.max():.1f}s · 10초 초과 {(shifts > 10).sum()}건)\n")
 
     all_anchors = resolve_anchors(observations, pitches, DURATION)
     old_anchors = resolve_anchors(old_obs, pitches, DURATION)
