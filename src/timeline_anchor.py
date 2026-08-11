@@ -35,6 +35,9 @@ def resolve_anchors(
     """
     (영상 시각, P:N) 관측을 (영상 시각, 투구 인덱스) 앵커로 바꾼다.
 
+    인덱스는 그 시각에 **대기 중인** 투구다. P:N이 보이면 N개를 던졌으므로 다음
+    차례는 N+1번째 = 인덱스 N이다. 앱이 이 인덱스를 그렇게 쓴다.
+
     P:N은 투수별 카운트라 경기 전체에서 유일하지 않다 — 투수가 바뀌면 1부터 다시
     센다. 그래서 같은 N을 갖는 투구가 여럿이다. 균등 가정 추정치에 가장 가까운
     후보를 고른다. 균등 가정은 국소적으로 틀려도 전역 평균은 맞으므로 "어느 투수
@@ -68,7 +71,13 @@ def resolve_anchors(
         if not matches:
             continue
         guess = (t / video_duration_sec) * n
-        candidates.append((t, min(matches, key=lambda i: abs(i - guess))))
+        thrown = min(matches, key=lambda i: abs(i - guess))
+        # 던진 공이 아니라 **다음에 던질 공**을 가리킨다. 앱은 c_idx를 대기 중인
+        # 투구로 쓴다 — 볼카운트는 그 공을 던지기 전 상태이고, "방금 던진 구종"은
+        # c_idx-1이며, 예측 대상도 c_idx다. 여기서 던진 공을 주면 화면 전체가
+        # 한 구씩 밀린다(실측: 5구까지 던진 지점에서 앱은 4구째 SL 인플레이 아웃을
+        # 방금 던진 구로 띄웠고 볼카운트도 0-0이었다. 영상은 5구째 FF 95mph, 1-0).
+        candidates.append((t, min(thrown + 1, n - 1)))
 
     return _longest_increasing_chain(candidates)
 

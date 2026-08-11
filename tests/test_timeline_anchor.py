@@ -58,9 +58,9 @@ def test_index_never_leaves_valid_range():
 def test_resolve_picks_candidate_nearest_to_uniform_guess():
     # 투수 1이 3구, 투수 2가 3구. P:2 는 인덱스 1과 4 둘 다 해당한다.
     pitches = make_pitches([1, 1, 1, 2, 2, 2])
-    # 영상 후반부 관측이면 뒤쪽 후보(4)를 골라야 한다
+    # 영상 후반부 관측이면 뒤쪽 후보(4)를 골라야 한다. 앵커는 그 다음 차례(5).
     anchors = resolve_anchors([(DURATION * 0.75, 2)], pitches, DURATION)
-    assert anchors == [(DURATION * 0.75, 4)]
+    assert anchors == [(DURATION * 0.75, 5)]
 
 
 def test_resolve_drops_readings_that_go_backwards():
@@ -68,7 +68,7 @@ def test_resolve_drops_readings_that_go_backwards():
     pitches = make_pitches([1] * 40)
     counters = [(1000.0, 10), (2000.0, 3), (3000.0, 20)]
     anchors = resolve_anchors(counters, pitches, DURATION)
-    assert [idx for _t, idx in anchors] == [9, 19]      # P:N 은 1부터, 인덱스는 0부터
+    assert [idx for _t, idx in anchors] == [10, 20]     # P:N 을 던졌으니 다음은 인덱스 N
 
 
 def test_resolve_keeps_readings_that_follow_a_misread():
@@ -78,7 +78,7 @@ def test_resolve_keeps_readings_that_follow_a_misread():
     pitches = make_pitches([1] * 40)
     counters = [(1000.0, 5), (2000.0, 12), (3000.0, 6), (4000.0, 7), (5000.0, 8)]
     anchors = resolve_anchors(counters, pitches, DURATION)
-    assert [idx for _t, idx in anchors] == [4, 5, 6, 7]
+    assert [idx for _t, idx in anchors] == [5, 6, 7, 8]
 
 
 def test_resolve_prefers_the_earlier_reading_when_chains_tie():
@@ -87,13 +87,26 @@ def test_resolve_prefers_the_earlier_reading_when_chains_tie():
     pitches = make_pitches([1] * 40)
     counters = [(1000.0, 10), (2000.0, 3), (3000.0, 20)]
     anchors = resolve_anchors(counters, pitches, DURATION)
-    assert [idx for _t, idx in anchors] == [9, 19]
+    assert [idx for _t, idx in anchors] == [10, 20]
+
+
+def test_resolve_points_at_the_pitch_that_has_not_been_thrown_yet():
+    # 앱은 c_idx를 "대기 중인 투구"로 쓴다. 볼카운트는 그 공을 던지기 전 상태이고
+    # "방금 던진 구종"은 c_idx-1이다. P:5 를 읽은 시각에 인덱스 4(5번째 공)를 주면
+    # 화면이 한 구씩 밀린다 — 실측으로 5구까지 던진 지점에서 4구째가 표시됐다.
+    pitches = make_pitches([1] * 40)
+    assert resolve_anchors([(1000.0, 5)], pitches, DURATION) == [(1000.0, 5)]
+
+
+def test_resolve_never_points_past_the_last_pitch():
+    pitches = make_pitches([1] * 3)
+    assert resolve_anchors([(1000.0, 3)], pitches, DURATION) == [(1000.0, 2)]
 
 
 def test_resolve_ignores_unreadable_entries():
     pitches = make_pitches([1] * 40)
     anchors = resolve_anchors([(1000.0, None), (2000.0, 5)], pitches, DURATION)
-    assert anchors == [(2000.0, 4)]
+    assert anchors == [(2000.0, 5)]
 
 
 def test_resolve_ignores_counter_with_no_matching_pitch():

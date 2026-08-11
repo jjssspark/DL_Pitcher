@@ -1091,7 +1091,7 @@ with st.sidebar:
             f'<div>이닝 <span style="color:#93c5fd;font-weight:700">{half} {cur["inning"]}회</span></div>'
             f'<div>카운트 <span style="color:#e2e8f0;font-weight:700">{cur["balls"]}-{cur["strikes"]}</span>'
             f'  아웃 <span style="color:#fbbf24;font-weight:700">{cur["outs"]}</span></div>'
-            f'<div>진행 <span style="color:#a78bfa;font-weight:700">{c_idx+1}/{len(pitches)}구</span></div>'
+            f'<div>진행 <span style="color:#a78bfa;font-weight:700">{c_idx}/{len(pitches)}구</span></div>'
             f'</div></div>', unsafe_allow_html=True)
 
     # 구종 범례
@@ -1199,8 +1199,15 @@ else:
 st.markdown("<div style='height:.3rem'></div>", unsafe_allow_html=True)
 
 # 6회초 알림
+#
+# 자리를 먼저 잡고 내용만 채운다. 조건부로 st.warning()을 부르면 배너가 뜨는 순간
+# 아래 영상 컴포넌트 위의 요소 수가 바뀐다. Streamlit은 요소의 위치로 컴포넌트를
+# 식별하므로 iframe이 리마운트되고 영상이 처음으로 돌아간다 — 실측으로 6회에
+# 진입한 직후 앱은 162구를 가리키는데 영상만 경기 시작(FLAHERTY P:3, 1회)으로
+# 되돌아가 둘이 분리됐다. 자동 싱크는 전진만 하므로 스스로 복구되지도 않는다.
+_sixth_inning_slot = st.empty()
 if st.session_state.get("_sixth_inning_alert"):
-    st.warning("🔔 6회초 시작 — 1~5이닝 분析 구간 완료!", icon="⚾")
+    _sixth_inning_slot.warning("🔔 6회초 시작 — 1~5이닝 분석 구간 완료!", icon="⚾")
 
 # ══ OCR 실시간 감지 결과 처리 ════════════════════════════════════════
 _OCR_TO_CODE = {
@@ -1290,6 +1297,15 @@ if loaded:
             else:
                 _vid_t = None
 
+            # 이동 직후 영상이 아직 옛 시각을 보고하는 구간을 건너뛴다. 목표 근처에
+            # 닿으면 그때부터 다시 자동 싱크를 받는다.
+            _pending_seek = st.session_state.get("_pending_seek_t")
+            if _pending_seek is not None:
+                if _vid_t is not None and abs(_vid_t - _pending_seek) <= 5.0:
+                    st.session_state._pending_seek_t = None
+                else:
+                    _vid_t = None
+
             print(f"[SYNC] vid_t={_vid_t} pl={_vid_pl} loaded={loaded} lpath={bool(_local_path)}")
             if _vid_t is not None and loaded and _vid_pl:
                 _new_cidx_ts = index_at_time(
@@ -1348,7 +1364,10 @@ if loaded:
                 _sync_note = "투구 모션 감지 중…"
             else:
                 _sync_note = ""
-            _pitch_label = f"투구 {c_idx+1} / {len(pitches)} | "
+            # c_idx는 대기 중인 투구다. 사용자가 보는 기준은 방송 스코어버그의
+            # 투구수이므로 "지금까지 던진 개수"(= c_idx)를 그대로 쓴다. 슬라이더
+            # 손잡이 숫자도 같은 값이라 둘이 어긋나지 않는다.
+            _pitch_label = f"투구 {c_idx} / {len(pitches)} | "
             if _sync_note:
                 st.caption(f"{_pitch_label}{_sync_note}")
 
@@ -1371,18 +1390,35 @@ if loaded:
                         idx, _timeline_anchors(pitches),
                         FIXED_DEMO_VIDEO_DURATION_SEC, len(pitches),
                     )
+                    # 영상이 실제로 옮겨가기 전 한동안 옛 시각을 계속 보고한다. 그동안
+                    # 자동 싱크가 그 옛 시각으로 인덱스를 정하면, 뒤로 이동한 순간
+                    # 곧바로 원래 자리로 끌려간다(자동 싱크는 전진만 하므로). 도착을
+                    # 확인할 때까지 보고를 무시하려고 목표 시각을 남긴다.
+                    st.session_state._pending_seek_t = st.session_state.seek_to
 
             # 슬라이더 손잡이를 현재 인덱스에 맞춘다. 위젯을 만들기 **전에** 키를 쓰는 것이
             # 정해진 방법이다 — 콜백 안에서 자기 위젯 키를 건드리면 on_change와 얽혀
             # 방금 누른 값이 되돌아온다(실측: 버튼을 눌러도 seek_to가 0.0으로 잡혔다).
-            if st.session_state.get("pitch_slider") != c_idx:
+            # **무조건 덮어쓰면 안 된다.** 슬라이더를 끌면 재실행이 걸리는데, 그 재실행에서
+            # 이 줄이 사용자가 끈 값을 위젯이 만들어지기 전에 c_idx로 되돌린다. 그러면
+            # 아래 sel != c_idx 가 영원히 성립하지 않는다 — 실측으로 161까지 끌어도
+            # 손잡이가 3으로 돌아오고 영상도 안 움직였다.
+            #
+            # 그래서 "인덱스가 다른 이유로 바뀌었을 때"만 손잡이를 옮긴다. 마지막으로
+            # 밀어넣은 값을 따로 기억해두면 자동 싱크·버튼(인덱스가 먼저 바뀐다)과
+            # 슬라이더 조작(위젯 값이 먼저 바뀐다)을 구분할 수 있다.
+            if st.session_state.get("_slider_synced_idx") != c_idx:
                 st.session_state.pitch_slider = c_idx
+                st.session_state._slider_synced_idx = c_idx
 
-            sel = st.slider("투구 선택", 0, max(len(pitches)-1, 0),
-                            key="pitch_slider", label_visibility="collapsed")
-            if sel != c_idx:                     # 사용자가 직접 끈 경우
-                _goto_pitch_cb(sel)
-                st.rerun()
+            # 버튼과 같은 이유로 on_change 콜백을 쓴다. 반환값으로 처리하면 재실행
+            # 경쟁에 밀린다 (아래 버튼 주석 참고).
+            def _slider_moved_cb() -> None:
+                _goto_pitch_cb(st.session_state.pitch_slider)
+
+            st.slider("투구 선택", 0, max(len(pitches)-1, 0),
+                      key="pitch_slider", label_visibility="collapsed",
+                      on_change=_slider_moved_cb)
 
             _bp, _bn = st.columns(2)
             with _bp:
@@ -1772,7 +1808,7 @@ if loaded:
 
             # 투수 이번 경기 구종 분포 (누적)
             if c_idx >= 3:
-                seen = [p for p in pitches[:c_idx+1]
+                seen = [p for p in pitches[:c_idx]
                         if p["pitcher_id"] == cur["pitcher_id"] and p["pitch_type"]]
                 if seen:
                     cnt   = Counter(p["pitch_type"] for p in seen)

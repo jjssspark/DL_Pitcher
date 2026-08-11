@@ -76,6 +76,8 @@ def internal_consistency(anchors: list[tuple[float, int]],
     같은 투수 안에서 P:N이 1 늘면 인덱스도 정확히 1 늘어야 한다. resolve_anchors는
     '증가하는가'만 보고 '얼마나 증가하는가'는 안 본다. 그래서 이 일치율은 공짜로
     얻는 독립 검사다.
+
+    앵커 인덱스는 '다음에 던질 공'이므로(TS-034), 방금 던진 공은 하나 앞이다.
     """
     by_time = {round(t, 3): c for t, c in observations}
     counts = pitcher_pitch_counts(pitches)
@@ -84,10 +86,13 @@ def internal_consistency(anchors: list[tuple[float, int]],
         c0, c1 = by_time.get(round(t0, 3)), by_time.get(round(t1, 3))
         if c0 is None or c1 is None:
             continue
-        same_pitcher = pitches[i0]["pitcher_id"] == pitches[i1]["pitcher_id"]
+        thrown0, thrown1 = i0 - 1, i1 - 1
+        if thrown0 < 0 or thrown1 < 0:
+            continue
+        same_pitcher = pitches[thrown0]["pitcher_id"] == pitches[thrown1]["pitcher_id"]
         if not same_pitcher or c1 <= c0:
             continue
-        if (i1 - i0) == (c1 - c0) and counts[i1] == c1:
+        if (i1 - i0) == (c1 - c0) and counts[thrown1] == c1:
             ok += 1
         else:
             bad += 1
