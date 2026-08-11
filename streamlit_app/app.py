@@ -384,35 +384,53 @@ PITCH_META = {
               "note": "기록 시스템이 종류를 판정하지 못한 투구다."},
 }
 
-# 구종을 "속구 대비 얼마나 휘는가" 하나로 정의한다. (dx, dy) 단위는 그림 좌표계이고,
-# **포수 시점**(타석 뒤에서 마운드를 바라본 방향)의 우완 투수 기준이다.
+# 구종별 실제 무브먼트. Statcast 2024-06-03~09, **우완 투수** 18,944구 실측이다
+# (scripts/measure_pitch_movement.py). 단위는 인치, 무회전 궤적 대비 변화량이다.
 #
-#   dx < 0  팔 쪽(3루 방향) — 싱커·체인지업처럼 우타자에게 붙는다
-#   dx > 0  글러브 쪽(1루 방향) — 슬라이더·스위퍼처럼 우타자에게서 도망간다
-#   dy > 0  속구보다 더 떨어진다
+#   pfx_x  횡변화. 우완에서 **음수가 팔 쪽(3루 방향)**이다. 문서를 믿지 않고 데이터로
+#          확인했다 — 싱커 -14.75, 슬라이더 +4.79로 반대 방향이고 우완 싱커는 팔 쪽이다.
+#   pfx_z  종변화. 클수록 덜 떨어진다. 포심이 15.66으로 가장 크다.
 #
-# 측면도를 쓰다가 바꿨다. 옆에서 보면 낙차만 보이고 횡변화가 화면 안쪽으로 들어가
-# 슬라이더와 스위퍼가 똑같아 보였다. 둘을 가르는 건 옆으로 쓸리는 양이다.
-PITCH_BREAK = {
-    "straight": (0, 0),      # 포심 — 기준
-    "cut":      (14, 13),
-    "slide":    (24, 26),
-    "sweep":    (36, 15),
-    "sink":     (-19, 27),
-    "dive":     (-8, 42),
-    "drop":     (9, 47),
-    "wobble":   (7, 18),
-    "lob":      (0, 56),
+# 표본이 작은 것(KN 73구)은 그대로 쓰되 화면에 n을 적는다. Statcast에 거의 안 잡히는
+# 구종(FA·FO·EP·CS)은 실측이 없어 이웃 구종에서 추정했고 그렇다고 표시한다.
+PITCH_MOVEMENT = {                      # code: (pfx_x, pfx_z, n)
+    "FF": (-7.43, 15.66, 6311),
+    "SL": (4.79, 1.64, 2966),
+    "SI": (-14.75, 7.27, 2700),
+    "FC": (2.58, 8.45, 1697),
+    "CH": (-14.26, 4.85, 1557),
+    "ST": (13.83, 0.95, 1309),
+    "CU": (9.63, -9.96, 1232),
+    "FS": (-10.87, 2.26, 743),
+    "KC": (7.82, -10.20, 235),
+    "KN": (-6.39, -6.17, 73),
+    "FA": (-7.43, 15.66, 0),            # 포심과 같은 계열로 본다
+    "FO": (-10.87, -2.00, 0),           # 스플리터보다 더 떨어진다
+    "CS": (9.63, -14.00, 0),            # 커브보다 느리고 더 떨어진다
+    "EP": (0.00, -30.00, 0),            # 산처럼 띄우는 공
 }
+
+# 인치 -> 그림 좌표. 존이 68x62이고 실제 스트라이크존이 약 17x25인치니 참값은 축마다
+# 다르지만, 두 축에 같은 배율을 쓴다 — 횡·종을 다른 배율로 그리면 "슬라이더가 옆으로
+# 더 가는지 아래로 더 가는지"가 배율 때문에 뒤바뀐다.
+MOVE_SCALE = 1.6
 
 ZONE = (66, 40, 68, 62)          # 스트라이크존 x, y, w, h
 RELEASE = (100, 6)               # 릴리스 지점 (멀어서 화면 위쪽 가운데)
-FASTBALL_END = (100, 60)         # 속구가 도달하는 지점
+FASTBALL_END = (100, 60)         # 포심이 도달하는 지점 — 모든 변화의 기준
 
 
-def _break_path(shape: str) -> tuple[str, tuple[float, float]]:
+def _break_offset(code: str) -> tuple[float, float]:
+    """포심 대비 변화량 (인치). 그림도 설명도 이 값 하나에서 나온다."""
+    fx, fz, _ = PITCH_MOVEMENT["FF"]
+    px, pz, _ = PITCH_MOVEMENT.get(code, PITCH_MOVEMENT["FF"])
+    return px - fx, fz - pz          # (횡: 글러브 쪽 +, 종: 더 떨어질수록 +)
+
+
+def _break_path(code: str) -> tuple[str, tuple[float, float]]:
     """궤적 경로와 도착점. 앞은 거의 직선이고 뒤에서 꺾인다 — 실제로 변화는 늦게 온다."""
-    dx, dy = PITCH_BREAK.get(shape, (0, 0))
+    ox, oy = _break_offset(code)
+    dx, dy = ox * MOVE_SCALE, oy * MOVE_SCALE
     x0, y0 = RELEASE
     x3, y3 = FASTBALL_END[0] + dx, FASTBALL_END[1] + dy
     x1, y1 = x0 + dx * 0.05, y0 + (y3 - y0) * 0.40
@@ -421,20 +439,34 @@ def _break_path(shape: str) -> tuple[str, tuple[float, float]]:
             (x3, y3))
 
 
+def _baseball(radius: float = 10.0) -> str:
+    """실제 야구공. 흰 가죽에 붉은 실밥 두 줄."""
+    r = radius
+    return (
+        f'<circle r="{r}" fill="url(#ballSkin)"/>'
+        f'<path d="M{-r*0.55} {-r*0.83} C{-r*0.1} {-r*0.4}, {-r*0.1} {r*0.4}, '
+        f'{-r*0.55} {r*0.83}" fill="none" stroke="#d64545" stroke-width="{r*0.16}" '
+        f'stroke-linecap="round"/>'
+        f'<path d="M{r*0.55} {-r*0.83} C{r*0.1} {-r*0.4}, {r*0.1} {r*0.4}, '
+        f'{r*0.55} {r*0.83}" fill="none" stroke="#d64545" stroke-width="{r*0.16}" '
+        f'stroke-linecap="round"/>'
+        f'<circle r="{r}" fill="none" stroke="rgba(0,0,0,.22)" stroke-width="{r*0.08}"/>'
+    )
+
+
 def _pitch_arc(code: str, width: int = 32) -> str:
     """목록·카드에 쓰는 작은 아이콘 — 측면도.
 
-    큰 그림과 같은 (dx, dy)에서 뽑되 시점만 다르다. 포수 시점 경로를 그대로 줄이면
+    큰 그림과 같은 실측값에서 뽑되 시점만 다르다. 포수 시점 경로를 그대로 줄이면
     거의 수직이라 26px에서 전부 비슷한 사선이 되어 구분이 안 됐다. 옆에서 보면
     낙차가 길이로 펴지고, 횡변화는 늦게 꺾이는 정도로 드러난다.
     """
     meta = PITCH_META.get(code, PITCH_META["OTHER"])
-    dx, dy = PITCH_BREAK.get(meta["shape"], (0, 0))
+    ox, oy = _break_offset(code)
     x0, y0 = 6, 10
-    x3, y3 = 58, 10 + 6 + dy * 0.62          # 속구도 조금은 떨어진다
-    bend = abs(dx) * 0.34                     # 횡변화가 클수록 늦게 크게 꺾인다
+    x3, y3 = 58, 10 + 5 + oy * 0.95          # 포심도 조금은 떨어진다
     x1, y1 = x0 + 20, y0 + (y3 - y0) * 0.10
-    x2, y2 = x0 + 38, y0 + (y3 - y0) * (0.55 + bend * 0.006)
+    x2, y2 = x0 + 38, y0 + (y3 - y0) * (0.55 + abs(ox) * 0.004)
     return (
         f'<svg viewBox="0 0 64 52" width="{width}" height="{int(width * 0.81)}" '
         f'style="overflow:visible;flex-shrink:0">'
@@ -446,29 +478,29 @@ def _pitch_arc(code: str, width: int = 32) -> str:
 
 
 def _pitch_arc_big(code: str) -> str:
-    """호버 카드용 큰 그림 — 포수 시점, 공이 실제로 날아온다.
+    """호버 카드용 큰 그림 — 포수 시점, 실제 야구공이 날아온다.
 
-    정지 그림으로는 "휜다"를 글로 설명해야 하는데, 움직이면 설명이 필요 없다.
+    궤적은 Statcast 실측 무브먼트로 그린다. 정지 그림으로는 "휜다"를 글로 설명해야
+    하는데 움직이면 설명이 필요 없다.
 
-    몇 가지를 얹어 실제로 날아오는 느낌을 만들었다.
-      - 잔상 세 개가 뒤따른다. 하나만 움직이면 점이 미끄러지는 것처럼 보인다.
-      - keySplines로 뒤로 갈수록 빨라지게 했다. 멀리 있을 때는 화면상 느리게, 가까울수록
-        빠르게 보이는 게 원근이다.
-      - 도착 순간 파동이 퍼진다. 공이 어디에 꽂혔는지가 남는다.
+      - 잔상 셋이 뒤따른다. 하나만 움직이면 점이 미끄러지는 것처럼 보인다.
+      - keySplines로 가까울수록 빠르게. 원근이 그렇다.
+      - 공이 회전한다. 실밥이 도는 게 보여야 야구공으로 읽힌다.
+      - 도착 순간 파동이 퍼진다. 어디에 꽂혔는지가 남는다.
       - 한 바퀴 돌고 잠깐 쉰다. 쉼 없이 반복하면 눈이 궤적을 못 따라간다.
     """
     meta = PITCH_META.get(code, PITCH_META["OTHER"])
-    shape = meta["shape"]
     color = meta["color"]
-    path, (ex, ey) = _break_path(shape)
-    ref_path, (rx, ry) = _break_path("straight")
+    path, (ex, ey) = _break_path(code)
+    ref_path, (rx, ry) = _break_path("FF")
+    ox, oy = _break_offset(code)
     zx, zy, zw, zh = ZONE
     uid = f"p{code}"
+    is_ff = code in ("FF", "FA")
 
     DUR = "2.6s"                       # 비행 1.9초 + 여운 0.7초
-    FLY = 0.73                         # 비행이 끝나는 지점 (keyTimes 비율)
-    # 앞은 천천히, 뒤로 갈수록 빠르게. 원근 때문에 실제로 그렇게 보인다.
-    SPLINE = ".42 0 .78 .45"
+    FLY = 0.73
+    SPLINE = ".42 0 .78 .45"           # 앞은 천천히, 뒤로 갈수록 빠르게
 
     def motion(delay: float) -> str:
         return (f'<animateMotion dur="{DUR}" repeatCount="indefinite" '
@@ -477,33 +509,29 @@ def _pitch_arc_big(code: str) -> str:
                 f'<mpath href="#{uid}"/></animateMotion>')
 
     trails = ""
-    for k, (delay, r, op) in enumerate(((-0.05, 4.2, .30), (-0.10, 3.4, .20),
-                                        (-0.16, 2.6, .12))):
+    for delay, r, op in ((-0.05, 4.0, .26), (-0.10, 3.2, .17), (-0.16, 2.4, .10)):
         trails += (f'<circle r="{r}" fill="{color}" opacity="{op}">{motion(delay)}'
                    f'<animate attributeName="opacity" values="0;{op};{op};0;0" '
                    f'keyTimes="0;.08;{FLY - 0.02};{FLY};1" dur="{DUR}" '
                    f'repeatCount="indefinite" begin="{delay}s"/></circle>')
 
-    reference = ""
-    if shape != "straight":
-        reference = (
-            f'<path d="{ref_path}" fill="none" stroke="#93a1b6" stroke-width="1.5" '
-            f'stroke-dasharray="4 5" opacity=".45"/>'
-            f'<circle cx="{rx}" cy="{ry}" r="7.5" fill="none" stroke="#93a1b6" '
-            f'stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/>')
+    reference = "" if is_ff else (
+        f'<path d="{ref_path}" fill="none" stroke="#93a1b6" stroke-width="1.5" '
+        f'stroke-dasharray="4 5" opacity=".45"/>'
+        f'<circle cx="{rx}" cy="{ry}" r="7.5" fill="none" stroke="#93a1b6" '
+        f'stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/>')
 
     return (
-        f'<svg viewBox="26 -14 148 148" width="100%" style="display:block">'
+        f'<svg viewBox="26 -14 148 128" width="100%" style="display:block">'
         f'<defs>'
-        f'<radialGradient id="g{uid}" cx=".35" cy=".32" r=".75">'
-        f'<stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>'
-        f'<stop offset=".45" stop-color="{color}"/>'
-        f'<stop offset="1" stop-color="{color}" stop-opacity=".85"/>'
+        f'<radialGradient id="ballSkin" cx=".36" cy=".3" r=".78">'
+        f'<stop offset="0" stop-color="#ffffff"/>'
+        f'<stop offset=".6" stop-color="#f3f4f6"/>'
+        f'<stop offset="1" stop-color="#c7ccd4"/>'
         f'</radialGradient>'
-        f'<filter id="f{uid}" x="-60%" y="-60%" width="220%" height="220%">'
-        f'<feGaussianBlur stdDeviation="2.4" result="b"/>'
-        f'<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'
-        f'</filter>'
+        f'<filter id="f{uid}" x="-80%" y="-80%" width="260%" height="260%">'
+        f'<feDropShadow dx="0" dy="0" stdDeviation="2.2" flood-color="{color}" '
+        f'flood-opacity=".85"/></filter>'
         f'</defs>'
         # 스트라이크존 — 3x3 격자라 도착 위치가 어디쯤인지 읽힌다
         f'<rect x="{zx}" y="{zy}" width="{zw}" height="{zh}" fill="rgba(96,165,250,.06)" '
@@ -515,33 +543,54 @@ def _pitch_arc_big(code: str) -> str:
         f'L{zx+zw/2} {zy+zh+25} L{zx+6} {zy+zh+17} Z" fill="#cbd5e1" opacity=".45"/>'
         + reference
         + f'<path id="{uid}" d="{path}" fill="none" stroke="{color}" '
-          f'stroke-width="1.8" opacity=".28"/>'
+          f'stroke-width="1.8" opacity=".3"/>'
         + trails
-        # 도착 파동 — 공이 어디에 꽂혔는지 남긴다
+        # 도착 파동
         + f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="4" fill="none" stroke="{color}" '
           f'stroke-width="2" opacity="0">'
-          f'<animate attributeName="r" values="4;18" keyTimes="0;1" dur="{DUR}" '
-          f'begin="0s" repeatCount="indefinite" '
-          f'keyTimes="0;{FLY};1" values="4;4;20" calcMode="spline" '
+          f'<animate attributeName="r" values="4;4;20" keyTimes="0;{FLY};1" '
+          f'dur="{DUR}" repeatCount="indefinite" calcMode="spline" '
           f'keySplines="0 0 1 1;.2 .7 .4 1"/>'
-          f'<animate attributeName="opacity" values="0;0;.65;0" '
+          f'<animate attributeName="opacity" values="0;0;.6;0" '
           f'keyTimes="0;{FLY};{FLY + 0.05};1" dur="{DUR}" repeatCount="indefinite"/>'
           f'</circle>'
-        # 공
-        + f'<circle r="3" fill="url(#g{uid})" filter="url(#f{uid})">'
-          f'{motion(0)}'
-          f'<animate attributeName="r" values="2.6;3.6;6;9.5;9.5" '
-          f'keyTimes="0;.32;.56;{FLY};1" dur="{DUR}" repeatCount="indefinite" '
-          f'calcMode="spline" keySplines="{SPLINE};{SPLINE};{SPLINE};0 0 1 1"/>'
+        # 야구공 — 이동(g) > 크기(g) > 회전(g) 순으로 감싼다. 한 요소에 여러 변환을
+        # 동시에 애니메이션할 수 없어서 이렇게 나눈다.
+        + f'<g filter="url(#f{uid})">{motion(0)}'
+          f'<g transform="scale(.26)">'
+          f'<animateTransform attributeName="transform" type="scale" '
+          f'values=".26;.36;.6;.95;.95" keyTimes="0;.32;.56;{FLY};1" dur="{DUR}" '
+          f'repeatCount="indefinite" calcMode="spline" '
+          f'keySplines="{SPLINE};{SPLINE};{SPLINE};0 0 1 1"/>'
+          f'<g><animateTransform attributeName="transform" type="rotate" '
+          f'from="0" to="360" dur="1.1s" repeatCount="indefinite"/>'
+          + _baseball(10.0) +
+          f'</g></g>'
           f'<animate attributeName="opacity" values="0;1;1;1;0;0" '
           f'keyTimes="0;.05;.5;{FLY};{FLY + 0.12};1" dur="{DUR}" repeatCount="indefinite"/>'
-          f'</circle>'
+          f'</g>'
         + f'<text x="{RELEASE[0] - 16}" y="-3" font-size="8.5" fill="#93a1b6">릴리스</text>'
-        + (f'<text x="{rx + 11}" y="{ry + 3}" font-size="8" fill="#93a1b6">속구</text>'
-           if reference else '')
-        + f'<text x="30" y="130" font-size="8" fill="#7b8aa1">포수 시점 · 우완 투수 기준</text>'
+        + ('' if is_ff else
+           f'<text x="{rx + 11}" y="{ry + 3}" font-size="8" fill="#93a1b6">포심</text>')
+        # 실측 수치는 SVG 밖 HTML로 뺐다. 그림이 폭에 맞춰 3배로 늘어나면 글자도 같이
+        # 커져 잘린다. 밖에 두면 글자 크기가 그림 배율과 무관해지고 줄바꿈도 된다.
         + '</svg>'
     )
+
+
+def _pitch_stats_line(code: str) -> str:
+    """그림 아래에 붙는 실측 수치. 그림은 느낌이고 숫자가 근거다."""
+    ox, oy = _break_offset(code)
+    n = PITCH_MOVEMENT.get(code, (0, 0, 0))[2]
+    source = (f'Statcast 실측 n={n:,}' if n else '실측값 없어 이웃 구종에서 추정')
+    if code in ("FF", "FA"):
+        body = '모든 변화의 기준이 되는 공'
+    else:
+        body = (f'포심 대비 옆으로 <b>{abs(ox):.1f}인치</b> '
+                f'{"글러브 쪽" if ox > 0 else "팔 쪽"}, '
+                f'아래로 <b>{oy:.1f}인치</b> 더 떨어진다')
+    return (f'<div class="pl-stat">{body}</div>'
+            f'<div class="pl-src">포수 시점 · 우완 투수 기준 · {source}</div>')
 
 
 FASTBALLS = {"FF", "FA", "SI", "FC"}
@@ -1395,6 +1444,7 @@ with st.sidebar:
         f'</div>'
         f'<div class="pl-simple">{_m["simple"]}</div>'
         f'<div class="pl-fig">{_pitch_arc_big(_c)}</div>'
+        f'{_pitch_stats_line(_c)}'
         f'<div class="pl-note">{_m["note"]}</div>'
         f'</div></div></div>'
         for _c, _m in list(PITCH_META.items())[:10] if _c != "OTHER"
@@ -1435,8 +1485,13 @@ with st.sidebar:
         'margin-bottom:1rem;word-break:keep-all}'
         '.pl-fig{padding:.7rem .4rem .3rem;border-radius:12px;'
         'background:rgba(10,16,30,.5);border:1px solid rgba(148,163,184,.1)}'
-        '.pl-note{margin-top:1rem;font-size:.92rem;line-height:1.8;color:#a6b3c6;'
+        '.pl-stat{margin-top:.7rem;font-size:.88rem;color:#cbd5e1;line-height:1.6;'
         'word-break:keep-all}'
+        '.pl-stat b{color:#f1f5f9;font-weight:800}'
+        '.pl-src{margin-top:.2rem;font-size:.72rem;color:#7b8aa1}'
+        '.pl-note{margin-top:.9rem;padding-top:.9rem;'
+        'border-top:1px solid rgba(148,163,184,.14);'
+        'font-size:.92rem;line-height:1.8;color:#a6b3c6;word-break:keep-all}'
         '</style>'
         '<div class="sidebar-card">'
         '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#93a1b6;margin-bottom:.3rem">구종 범례</p>'
