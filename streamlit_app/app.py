@@ -304,133 +304,242 @@ def _timeline_anchors(pitches: list[dict]) -> list[tuple[float, int]]:
 PITCH_META = {
     "FF": {"name": "포심 패스트볼", "en": "Four-Seam Fastball", "color": "#ef4444",
            "shape": "straight", "speed": "92~100",
-           "note": "백스핀이 최대라 중력 대비 덜 떨어진다. 타자 눈에는 솟아 오는 것처럼 보인다."},
+           "simple": "가장 빠르고 가장 곧게 오는 공",
+           "note": "투수가 던질 수 있는 가장 빠른 공이다. 공이 뒤로 회전하면서 날아와 "
+                   "중력에 지는 정도가 덜하다. 그래서 타자 눈에는 예상보다 덜 떨어져 "
+                   "보이고, 마치 떠오르는 것처럼 느껴진다. 다른 모든 구종은 이 공을 "
+                   "기준으로 '얼마나 다르게 오는가'로 설명된다."},
     "FA": {"name": "패스트볼", "en": "Fastball", "color": "#f87171",
            "shape": "straight", "speed": "90~98",
-           "note": "Statcast가 세부 구분을 못 붙인 속구. 포심과 같은 계열로 본다."},
+           "simple": "종류를 특정 못 한 빠른 공",
+           "note": "기록 시스템이 세부 종류를 못 붙인 빠른 공이다. 포심과 같은 계열로 "
+                   "보면 된다."},
     "SI": {"name": "싱커", "en": "Sinker", "color": "#f97316",
            "shape": "sink", "speed": "90~97",
-           "note": "회전축이 기울어 팔 쪽으로 가라앉는다. 땅볼을 유도하려고 던진다."},
+           "simple": "빠르면서 아래로 가라앉는 공",
+           "note": "속구만큼 빠른데 홈플레이트 근처에서 아래로 처진다. 타자가 공 윗부분을 "
+                   "때리게 되어 공이 뜨지 않고 땅으로 굴러간다. 홈런을 맞기 싫을 때 "
+                   "던지는 공이다."},
     "FC": {"name": "커터", "en": "Cutter", "color": "#eab308",
            "shape": "cut", "speed": "86~94",
-           "note": "속구 궤적을 유지하다 마지막에 글러브 쪽으로 살짝 꺾인다. 배트를 부러뜨리는 공."},
+           "simple": "속구인 줄 알았는데 마지막에 살짝 비껴가는 공",
+           "note": "거의 끝까지 속구처럼 오다가 마지막 순간 옆으로 조금 미끄러진다. "
+                   "타자는 이미 속구라 판단하고 휘두른 뒤라 배트 중심을 살짝 벗어나 "
+                   "맞는다. 배트가 부러지는 장면이 이 공에서 많이 나온다."},
     "SL": {"name": "슬라이더", "en": "Slider", "color": "#3b82f6",
            "shape": "slide", "speed": "80~89",
-           "note": "옆으로 미끄러지며 떨어진다. 2스트라이크 결정구로 가장 많이 쓴다."},
+           "simple": "옆으로 미끄러지며 떨어지는 공",
+           "note": "속구보다 조금 느리면서 옆으로 미끄러지듯 휘고 동시에 떨어진다. "
+                   "타자가 스트라이크인 줄 알고 휘두르면 공은 이미 존 밖으로 나가 있다. "
+                   "삼진을 잡으려 할 때 가장 많이 쓰는 공이다."},
     "ST": {"name": "스위퍼", "en": "Sweeper", "color": "#06b6d4",
            "shape": "sweep", "speed": "78~86",
-           "note": "슬라이더보다 횡변화가 크다. 낙차는 적고 옆으로 크게 쓸린다."},
+           "simple": "옆으로 아주 크게 쓸려 나가는 공",
+           "note": "슬라이더의 사촌인데 옆으로 휘는 양이 훨씬 크다. 떨어지는 건 적고 "
+                   "빗자루로 쓸듯 옆으로 크게 빠져나간다. 최근 몇 년 사이 유행한 구종이다."},
     "CU": {"name": "커브", "en": "Curveball", "color": "#8b5cf6",
            "shape": "drop", "speed": "74~83",
-           "note": "탑스핀으로 큰 아치를 그리며 떨어진다. 속구와의 구속 차가 가장 크다."},
+           "simple": "위에서 아래로 뚝 떨어지는 느린 공",
+           "note": "속구와 속도 차이가 가장 큰 공이다. 공이 앞으로 회전해서 무지개처럼 "
+                   "큰 곡선을 그리며 뚝 떨어진다. 빠른 공을 기다리던 타자는 타이밍이 "
+                   "완전히 어긋난다."},
     "KC": {"name": "너클커브", "en": "Knuckle Curve", "color": "#a855f7",
            "shape": "drop", "speed": "76~84",
-           "note": "검지를 세워 쥐는 커브. 일반 커브보다 낙차가 급하다."},
+           "simple": "더 급하게 떨어지는 커브",
+           "note": "손가락 하나를 세워 쥐는 커브다. 일반 커브보다 떨어지는 각이 가파르다."},
     "CH": {"name": "체인지업", "en": "Changeup", "color": "#10b981",
            "shape": "sink", "speed": "79~89",
-           "note": "속구와 똑같은 팔스윙으로 8~12mph 느리게 던진다. 타이밍을 무너뜨리는 공."},
+           "simple": "속구인 척하다 느리게 오는 공",
+           "note": "던지는 팔 동작이 속구와 똑같은데 실제로는 10~15km/h 느리게 온다. "
+                   "타자는 빠른 공이 올 줄 알고 미리 휘두르기 시작했다가 공이 아직 "
+                   "도착하지 않아 헛스윙한다. 속이는 것이 목적인 공이다."},
     "FS": {"name": "스플리터", "en": "Splitter", "color": "#0891b2",
            "shape": "dive", "speed": "83~90",
-           "note": "검지와 중지를 벌려 쥔다. 홈플레이트 앞에서 급강하한다."},
+           "simple": "타자 앞에서 갑자기 꺼지는 공",
+           "note": "손가락 둘을 벌려 쥐고 던진다. 속구처럼 오다가 홈플레이트 바로 앞에서 "
+                   "갑자기 뚝 꺼진다. 타자가 반응할 시간이 없어 헛스윙이나 땅볼이 나온다."},
     "FO": {"name": "포크볼", "en": "Forkball", "color": "#0e7490",
            "shape": "dive", "speed": "75~85",
-           "note": "스플리터보다 더 깊이 끼워 쥐어 느리고 낙차가 크다."},
+           "simple": "스플리터보다 느리고 더 떨어지는 공",
+           "note": "손가락을 더 깊이 벌려 쥐어서 더 느리고 낙차가 크다."},
     "KN": {"name": "너클볼", "en": "Knuckleball", "color": "#78716c",
            "shape": "wobble", "speed": "60~75",
-           "note": "회전을 거의 없애 공기 흐름에 따라 불규칙하게 흔들린다. 포수도 못 읽는다."},
+           "simple": "회전이 없어 제멋대로 흔들리는 공",
+           "note": "공을 거의 회전시키지 않고 던진다. 회전이 없으면 공기 흐름에 따라 "
+                   "제멋대로 흔들려서 어디로 갈지 던진 투수도 모른다. 받아야 하는 포수도 "
+                   "특수 글러브를 쓴다."},
     "EP": {"name": "이피어스", "en": "Eephus", "color": "#6b7280",
            "shape": "lob", "speed": "50~65",
-           "note": "산처럼 높이 띄우는 초저속 변화구. 타이밍을 통째로 뺏는다."},
+           "simple": "산처럼 높이 띄우는 아주 느린 공",
+           "note": "일부러 아주 느리게, 포물선을 그리도록 높이 띄워 던진다. 빠른 공에 "
+                   "맞춰진 타자의 감각을 통째로 흔들려는 의도다. 아주 가끔 나온다."},
     "CS": {"name": "슬로커브", "en": "Slow Curve", "color": "#7c3aed",
            "shape": "drop", "speed": "65~75",
-           "note": "커브 중에서도 느리다. 같은 커브를 두 속도로 나눠 쓴다."},
+           "simple": "더 느린 커브",
+           "note": "커브 중에서도 특히 느리다. 같은 커브를 두 가지 속도로 나눠 던지면 "
+                   "타자가 더 헷갈린다."},
     "OTHER": {"name": "기타", "en": "Other", "color": "#8a99b0",
               "shape": "straight", "speed": "—",
-              "note": "Statcast가 분류하지 못한 투구."},
+              "simple": "분류되지 않은 투구",
+              "note": "기록 시스템이 종류를 판정하지 못한 투구다."},
 }
 
-# 궤적. 200x110 좌표계의 3차 베지에 제어점 네 개다. 왼쪽이 릴리스, 오른쪽이 홈플레이트.
-# 작은 아이콘과 호버 카드의 큰 그림이 같은 곡선을 쓴다 — 두 벌로 두면 어긋난다.
-PITCH_CURVES = {
-    "straight": ((16, 24), (70, 30), (120, 38), (180, 48)),
-    "cut":      ((16, 22), (75, 30), (125, 44), (180, 66)),
-    "slide":    ((16, 22), (80, 28), (130, 52), (180, 80)),
-    "sweep":    ((16, 30), (70, 26), (125, 44), (180, 74)),
-    "sink":     ((16, 22), (75, 42), (128, 62), (180, 88)),
-    "dive":     ((16, 22), (95, 26), (145, 44), (178, 98)),
-    "drop":     ((16, 18), (90, 16), (150, 52), (178, 100)),
-    "wobble":   ((16, 44), (60, 16), (105, 74), (180, 48)),
-    "lob":      ((16, 92), (58, -14), (140, -14), (180, 92)),
+# 구종을 "속구 대비 얼마나 휘는가" 하나로 정의한다. (dx, dy) 단위는 그림 좌표계이고,
+# **포수 시점**(타석 뒤에서 마운드를 바라본 방향)의 우완 투수 기준이다.
+#
+#   dx < 0  팔 쪽(3루 방향) — 싱커·체인지업처럼 우타자에게 붙는다
+#   dx > 0  글러브 쪽(1루 방향) — 슬라이더·스위퍼처럼 우타자에게서 도망간다
+#   dy > 0  속구보다 더 떨어진다
+#
+# 측면도를 쓰다가 바꿨다. 옆에서 보면 낙차만 보이고 횡변화가 화면 안쪽으로 들어가
+# 슬라이더와 스위퍼가 똑같아 보였다. 둘을 가르는 건 옆으로 쓸리는 양이다.
+PITCH_BREAK = {
+    "straight": (0, 0),      # 포심 — 기준
+    "cut":      (14, 13),
+    "slide":    (24, 26),
+    "sweep":    (36, 15),
+    "sink":     (-19, 27),
+    "dive":     (-8, 42),
+    "drop":     (9, 47),
+    "wobble":   (7, 18),
+    "lob":      (0, 56),
 }
-REFERENCE_SHAPE = "straight"      # 비교 기준선 — 속구는 거의 안 휜다
+
+ZONE = (66, 40, 68, 62)          # 스트라이크존 x, y, w, h
+RELEASE = (100, 6)               # 릴리스 지점 (멀어서 화면 위쪽 가운데)
+FASTBALL_END = (100, 60)         # 속구가 도달하는 지점
 
 
-def _bezier(points, t: float) -> tuple[float, float]:
-    """3차 베지에 위의 한 점."""
-    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = points
-    u = 1 - t
-    x = u**3 * x0 + 3 * u**2 * t * x1 + 3 * u * t**2 * x2 + t**3 * x3
-    y = u**3 * y0 + 3 * u**2 * t * y1 + 3 * u * t**2 * y2 + t**3 * y3
-    return x, y
-
-
-def _curve_path(points) -> str:
-    (x0, y0), (x1, y1), (x2, y2), (x3, y3) = points
-    return f"M{x0} {y0} C{x1} {y1}, {x2} {y2}, {x3} {y3}"
+def _break_path(shape: str) -> tuple[str, tuple[float, float]]:
+    """궤적 경로와 도착점. 앞은 거의 직선이고 뒤에서 꺾인다 — 실제로 변화는 늦게 온다."""
+    dx, dy = PITCH_BREAK.get(shape, (0, 0))
+    x0, y0 = RELEASE
+    x3, y3 = FASTBALL_END[0] + dx, FASTBALL_END[1] + dy
+    x1, y1 = x0 + dx * 0.05, y0 + (y3 - y0) * 0.40
+    x2, y2 = x0 + dx * 0.38, y0 + (y3 - y0) * 0.74
+    return (f"M{x0} {y0} C{x1:.1f} {y1:.1f}, {x2:.1f} {y2:.1f}, {x3:.1f} {y3:.1f}",
+            (x3, y3))
 
 
 def _pitch_arc(code: str, width: int = 32) -> str:
-    """목록·카드에 쓰는 작은 궤적 아이콘."""
+    """목록·카드에 쓰는 작은 아이콘 — 측면도.
+
+    큰 그림과 같은 (dx, dy)에서 뽑되 시점만 다르다. 포수 시점 경로를 그대로 줄이면
+    거의 수직이라 26px에서 전부 비슷한 사선이 되어 구분이 안 됐다. 옆에서 보면
+    낙차가 길이로 펴지고, 횡변화는 늦게 꺾이는 정도로 드러난다.
+    """
     meta = PITCH_META.get(code, PITCH_META["OTHER"])
-    pts = PITCH_CURVES.get(meta["shape"], PITCH_CURVES["straight"])
-    ex, ey = pts[3]
+    dx, dy = PITCH_BREAK.get(meta["shape"], (0, 0))
+    x0, y0 = 6, 10
+    x3, y3 = 58, 10 + 6 + dy * 0.62          # 속구도 조금은 떨어진다
+    bend = abs(dx) * 0.34                     # 횡변화가 클수록 늦게 크게 꺾인다
+    x1, y1 = x0 + 20, y0 + (y3 - y0) * 0.10
+    x2, y2 = x0 + 38, y0 + (y3 - y0) * (0.55 + bend * 0.006)
     return (
-        f'<svg viewBox="0 0 200 118" width="{width}" height="{int(width * 0.59)}" '
+        f'<svg viewBox="0 0 64 52" width="{width}" height="{int(width * 0.81)}" '
         f'style="overflow:visible;flex-shrink:0">'
-        f'<path d="{_curve_path(pts)}" fill="none" stroke="{meta["color"]}" '
-        f'stroke-width="9" stroke-linecap="round" opacity=".85"/>'
-        f'<circle cx="{ex}" cy="{ey}" r="13" fill="{meta["color"]}"/></svg>'
+        f'<path d="M{x0} {y0} C{x1:.1f} {y1:.1f}, {x2:.1f} {y2:.1f}, {x3:.1f} {y3:.1f}" '
+        f'fill="none" stroke="{meta["color"]}" stroke-width="3.4" '
+        f'stroke-linecap="round" opacity=".85"/>'
+        f'<circle cx="{x3:.1f}" cy="{y3:.1f}" r="4.6" fill="{meta["color"]}"/></svg>'
     )
 
 
 def _pitch_arc_big(code: str) -> str:
-    """호버 카드용 큰 그림. 속구 기준선과 겹쳐 그려야 '얼마나 휘는지'가 보인다.
+    """호버 카드용 큰 그림 — 포수 시점, 공이 실제로 날아온다.
 
-    공을 릴리스부터 홈플레이트까지 여러 개 찍는다. 뒤로 갈수록 커지고 진해진다 —
-    다가온다는 느낌을 주려는 것이다. 오른쪽 끝에 홈플레이트를 둬서 어디를 향하는
-    궤적인지 알 수 있게 한다.
+    정지 그림으로는 "휜다"를 글로 설명해야 하는데, 움직이면 설명이 필요 없다.
+
+    몇 가지를 얹어 실제로 날아오는 느낌을 만들었다.
+      - 잔상 세 개가 뒤따른다. 하나만 움직이면 점이 미끄러지는 것처럼 보인다.
+      - keySplines로 뒤로 갈수록 빨라지게 했다. 멀리 있을 때는 화면상 느리게, 가까울수록
+        빠르게 보이는 게 원근이다.
+      - 도착 순간 파동이 퍼진다. 공이 어디에 꽂혔는지가 남는다.
+      - 한 바퀴 돌고 잠깐 쉰다. 쉼 없이 반복하면 눈이 궤적을 못 따라간다.
     """
     meta = PITCH_META.get(code, PITCH_META["OTHER"])
     shape = meta["shape"]
-    pts = PITCH_CURVES.get(shape, PITCH_CURVES["straight"])
-    ref = PITCH_CURVES[REFERENCE_SHAPE]
+    color = meta["color"]
+    path, (ex, ey) = _break_path(shape)
+    ref_path, (rx, ry) = _break_path("straight")
+    zx, zy, zw, zh = ZONE
+    uid = f"p{code}"
 
-    balls = ""
-    for i, t in enumerate((0.0, 0.22, 0.44, 0.66, 0.85, 1.0)):
-        x, y = _bezier(pts, t)
-        r = 3.0 + i * 1.7
-        balls += (f'<circle cx="{x:.1f}" cy="{y:.1f}" r="{r:.1f}" '
-                  f'fill="{meta["color"]}" opacity="{0.3 + i * 0.14:.2f}"/>')
+    DUR = "2.6s"                       # 비행 1.9초 + 여운 0.7초
+    FLY = 0.73                         # 비행이 끝나는 지점 (keyTimes 비율)
+    # 앞은 천천히, 뒤로 갈수록 빠르게. 원근 때문에 실제로 그렇게 보인다.
+    SPLINE = ".42 0 .78 .45"
+
+    def motion(delay: float) -> str:
+        return (f'<animateMotion dur="{DUR}" repeatCount="indefinite" '
+                f'keyPoints="0;1;1" keyTimes="0;{FLY};1" calcMode="spline" '
+                f'keySplines="{SPLINE};0 0 1 1" begin="{delay}s">'
+                f'<mpath href="#{uid}"/></animateMotion>')
+
+    trails = ""
+    for k, (delay, r, op) in enumerate(((-0.05, 4.2, .30), (-0.10, 3.4, .20),
+                                        (-0.16, 2.6, .12))):
+        trails += (f'<circle r="{r}" fill="{color}" opacity="{op}">{motion(delay)}'
+                   f'<animate attributeName="opacity" values="0;{op};{op};0;0" '
+                   f'keyTimes="0;.08;{FLY - 0.02};{FLY};1" dur="{DUR}" '
+                   f'repeatCount="indefinite" begin="{delay}s"/></circle>')
 
     reference = ""
-    if shape != REFERENCE_SHAPE:
-        reference = (f'<path d="{_curve_path(ref)}" fill="none" stroke="#8a99b0" '
-                     f'stroke-width="2" stroke-dasharray="5 5" opacity=".45"/>')
+    if shape != "straight":
+        reference = (
+            f'<path d="{ref_path}" fill="none" stroke="#93a1b6" stroke-width="1.5" '
+            f'stroke-dasharray="4 5" opacity=".45"/>'
+            f'<circle cx="{rx}" cy="{ry}" r="7.5" fill="none" stroke="#93a1b6" '
+            f'stroke-width="1.5" stroke-dasharray="3 3" opacity=".5"/>')
 
     return (
-        '<svg viewBox="-6 -14 218 138" width="100%" style="display:block">'
-        # 스트라이크존 — 궤적이 어디로 향하는지 가늠자
-        '<rect x="168" y="30" width="30" height="52" rx="2" fill="none" '
-        'stroke="#8a99b0" stroke-width="1.4" stroke-dasharray="3 4" opacity=".35"/>'
-        '<path d="M170 104 L196 104 L196 110 L183 118 L170 110 Z" '
-        'fill="#93a1b6" opacity=".5"/>'
+        f'<svg viewBox="26 -14 148 148" width="100%" style="display:block">'
+        f'<defs>'
+        f'<radialGradient id="g{uid}" cx=".35" cy=".32" r=".75">'
+        f'<stop offset="0" stop-color="#ffffff" stop-opacity=".95"/>'
+        f'<stop offset=".45" stop-color="{color}"/>'
+        f'<stop offset="1" stop-color="{color}" stop-opacity=".85"/>'
+        f'</radialGradient>'
+        f'<filter id="f{uid}" x="-60%" y="-60%" width="220%" height="220%">'
+        f'<feGaussianBlur stdDeviation="2.4" result="b"/>'
+        f'<feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>'
+        f'</filter>'
+        f'</defs>'
+        # 스트라이크존 — 3x3 격자라 도착 위치가 어디쯤인지 읽힌다
+        f'<rect x="{zx}" y="{zy}" width="{zw}" height="{zh}" fill="rgba(96,165,250,.06)" '
+        f'stroke="#93a1b6" stroke-width="1.5" opacity=".65"/>'
+        f'<path d="M{zx+zw/3} {zy} V{zy+zh} M{zx+2*zw/3} {zy} V{zy+zh} '
+        f'M{zx} {zy+zh/3} H{zx+zw} M{zx} {zy+2*zh/3} H{zx+zw}" '
+        f'stroke="#93a1b6" stroke-width=".8" opacity=".22"/>'
+        f'<path d="M{zx+6} {zy+zh+11} L{zx+zw-6} {zy+zh+11} L{zx+zw-6} {zy+zh+17} '
+        f'L{zx+zw/2} {zy+zh+25} L{zx+6} {zy+zh+17} Z" fill="#cbd5e1" opacity=".45"/>'
         + reference
-        + f'<path d="{_curve_path(pts)}" fill="none" stroke="{meta["color"]}" '
-          f'stroke-width="2.6" stroke-linecap="round" opacity=".55"/>'
-        + balls
-        + f'<text x="16" y="-2" font-size="10" fill="#8a99b0">릴리스</text>'
-        + (f'<text x="118" y="-2" font-size="10" fill="#8a99b0">--- 속구 기준</text>'
+        + f'<path id="{uid}" d="{path}" fill="none" stroke="{color}" '
+          f'stroke-width="1.8" opacity=".28"/>'
+        + trails
+        # 도착 파동 — 공이 어디에 꽂혔는지 남긴다
+        + f'<circle cx="{ex:.1f}" cy="{ey:.1f}" r="4" fill="none" stroke="{color}" '
+          f'stroke-width="2" opacity="0">'
+          f'<animate attributeName="r" values="4;18" keyTimes="0;1" dur="{DUR}" '
+          f'begin="0s" repeatCount="indefinite" '
+          f'keyTimes="0;{FLY};1" values="4;4;20" calcMode="spline" '
+          f'keySplines="0 0 1 1;.2 .7 .4 1"/>'
+          f'<animate attributeName="opacity" values="0;0;.65;0" '
+          f'keyTimes="0;{FLY};{FLY + 0.05};1" dur="{DUR}" repeatCount="indefinite"/>'
+          f'</circle>'
+        # 공
+        + f'<circle r="3" fill="url(#g{uid})" filter="url(#f{uid})">'
+          f'{motion(0)}'
+          f'<animate attributeName="r" values="2.6;3.6;6;9.5;9.5" '
+          f'keyTimes="0;.32;.56;{FLY};1" dur="{DUR}" repeatCount="indefinite" '
+          f'calcMode="spline" keySplines="{SPLINE};{SPLINE};{SPLINE};0 0 1 1"/>'
+          f'<animate attributeName="opacity" values="0;1;1;1;0;0" '
+          f'keyTimes="0;.05;.5;{FLY};{FLY + 0.12};1" dur="{DUR}" repeatCount="indefinite"/>'
+          f'</circle>'
+        + f'<text x="{RELEASE[0] - 16}" y="-3" font-size="8.5" fill="#93a1b6">릴리스</text>'
+        + (f'<text x="{rx + 11}" y="{ry + 3}" font-size="8" fill="#93a1b6">속구</text>'
            if reference else '')
+        + f'<text x="30" y="130" font-size="8" fill="#7b8aa1">포수 시점 · 우완 투수 기준</text>'
         + '</svg>'
     )
 
@@ -1258,10 +1367,11 @@ with st.sidebar:
             f'<div>진행 <span style="color:#a78bfa;font-weight:700">{c_idx}/{len(pitches)}구</span></div>'
             f'</div></div>', unsafe_allow_html=True)
 
-    # 구종 범례 — 마우스를 올리면 설명이 펼쳐진다.
+    # 구종 범례 — 마우스를 올리면 화면 가운데 큰 카드가 뜬다.
     #
-    # 떠 있는 팝오버로 안 만들었다. 사이드바가 좁고 overflow가 걸려 있어 옆으로 띄우면
-    # 잘린다. 자리에서 펼치면 레이아웃이 밀리지만 안 잘린다.
+    # 처음엔 자리에서 아래로 펼쳤다. 사이드바가 좁아 그림이 200px도 안 됐고 목록이
+    # 밀려 어디를 보고 있었는지 잃어버렸다. position:fixed로 뷰포트 기준에 띄우면
+    # 사이드바 폭과 무관하게 크게 그릴 수 있다.
     _seen_types = {p["pitch_type"] for p in pitches} if loaded else set()
     _legend_rows = "".join(
         f'<div class="pl-row">'
@@ -1272,38 +1382,66 @@ with st.sidebar:
         f'{"<span class=pl-dot></span>" if _c in _seen_types else ""}'
         f'</div>'
         f'<div class="pl-card">'
-        f'<div class="pl-fig">{_pitch_arc_big(_c)}</div>'
+        f'<div class="pl-scrim"></div>'
+        f'<div class="pl-inner" style="border-top:3px solid {_m["color"]}">'
+        f'<div class="pl-hd">'
+        f'<span class="pl-badge" style="background:{_m["color"]}1f;color:{_m["color"]};'
+        f'border:1px solid {_m["color"]}55">{_c}</span>'
+        f'<div style="flex:1">'
+        f'<div class="pl-kr">{_m["name"]}</div>'
         f'<div class="pl-en">{_m["en"]}</div>'
-        f'<div class="pl-speed">{_m["speed"]} <span>mph</span></div>'
+        f'</div>'
+        f'<div class="pl-spd">{_m["speed"]}<span>mph</span></div>'
+        f'</div>'
+        f'<div class="pl-simple">{_m["simple"]}</div>'
+        f'<div class="pl-fig">{_pitch_arc_big(_c)}</div>'
         f'<div class="pl-note">{_m["note"]}</div>'
-        f'</div></div>'
+        f'</div></div></div>'
         for _c, _m in list(PITCH_META.items())[:10] if _c != "OTHER"
     )
     st.markdown(
         '<style>'
-        '.pl-row{border-radius:8px;padding:.16rem .3rem;transition:background .18s ease}'
-        '.pl-row:hover{background:rgba(59,130,246,.07)}'
-        '.pl-head{display:flex;align-items:center;gap:.4rem;font-size:.8rem}'
-        '.pl-code{font-weight:700;width:1.9rem;font-size:.72rem;letter-spacing:.02em}'
+        # 사이드바 안쪽 블록이 내용을 잘라내면 팝업이 안 보인다
+        '[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{overflow:visible!important}'
+        '.pl-row{border-radius:8px;padding:.3rem .35rem;transition:background .18s ease}'
+        '.pl-row:hover{background:rgba(96,165,250,.1)}'
+        '.pl-head{display:flex;align-items:center;gap:.5rem;font-size:.87rem}'
+        '.pl-code{font-weight:700;width:2.1rem;font-size:.78rem;letter-spacing:.02em}'
         '.pl-name{color:#a6b3c6}'
         '.pl-dot{width:5px;height:5px;border-radius:50%;background:#4dbd8a;'
         'margin-left:auto;flex-shrink:0}'
-        '.pl-card{max-height:0;opacity:0;overflow:hidden;'
-        'transition:max-height .28s ease,opacity .2s ease}'
-        '.pl-row:hover .pl-card{max-height:330px;opacity:1}'
-        '.pl-fig{margin:.5rem 0 .35rem;padding:.5rem .1rem .2rem;border-radius:8px;'
-        'background:rgba(10,16,30,.45)}'
-        '.pl-en{margin-top:.3rem;font-size:.62rem;letter-spacing:.06em;'
-        'text-transform:uppercase;color:#8a99b0}'
-        '.pl-speed{font-size:.9rem;font-weight:800;color:#cbd5e1;line-height:1.3}'
-        '.pl-speed span{font-size:.6rem;font-weight:600;color:#8a99b0}'
-        '.pl-note{font-size:.68rem;line-height:1.55;color:#a6b3c6;'
-        'padding-bottom:.3rem;word-break:keep-all}'
+        # 뷰포트 한가운데 고정. 사이드바 폭에 안 갇힌다.
+        '.pl-card{position:fixed;left:calc(50% + 4rem);top:50%;z-index:9998;'
+        'opacity:0;pointer-events:none;visibility:hidden;'
+        'transform:translate(-50%,-50%) scale(.965);'
+        'transition:opacity .18s ease,transform .22s cubic-bezier(.2,.8,.3,1),'
+        'visibility 0s linear .2s}'
+        '.pl-row:hover .pl-card{opacity:1;visibility:visible;'
+        'transform:translate(-50%,-50%) scale(1);transition-delay:0s}'
+        '.pl-scrim{position:fixed;inset:0;z-index:-1;background:rgba(8,13,24,.62);'
+        'backdrop-filter:blur(3px)}'
+        '.pl-inner{width:min(560px,84vw);max-height:86vh;overflow:auto;'
+        'background:linear-gradient(180deg,#26324f,#1d2740);'
+        'border:1px solid rgba(148,163,184,.22);border-radius:16px;'
+        'padding:1.5rem 1.7rem 1.6rem;box-shadow:0 28px 70px rgba(0,0,0,.55)}'
+        '.pl-hd{display:flex;align-items:center;gap:.85rem;margin-bottom:.9rem}'
+        '.pl-badge{font-size:1rem;font-weight:800;padding:.3rem .6rem;border-radius:8px;'
+        'letter-spacing:.02em}'
+        '.pl-kr{font-size:1.45rem;font-weight:800;color:#f1f5f9;line-height:1.2}'
+        '.pl-en{font-size:.76rem;letter-spacing:.08em;text-transform:uppercase;color:#93a1b6}'
+        '.pl-spd{font-size:1.5rem;font-weight:800;color:#e2e8f0;white-space:nowrap}'
+        '.pl-spd span{font-size:.72rem;font-weight:600;color:#93a1b6;margin-left:.25rem}'
+        '.pl-simple{font-size:1.02rem;font-weight:700;color:#cbd5e1;line-height:1.5;'
+        'margin-bottom:1rem;word-break:keep-all}'
+        '.pl-fig{padding:.7rem .4rem .3rem;border-radius:12px;'
+        'background:rgba(10,16,30,.5);border:1px solid rgba(148,163,184,.1)}'
+        '.pl-note{margin-top:1rem;font-size:.92rem;line-height:1.8;color:#a6b3c6;'
+        'word-break:keep-all}'
         '</style>'
         '<div class="sidebar-card">'
-        '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a99b0;margin-bottom:.3rem">구종 범례</p>'
+        '<p style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#93a1b6;margin-bottom:.3rem">구종 범례</p>'
         f'{_legend_rows}'
-        '<p style="margin-top:.4rem;font-size:.6rem;color:#6b7a91;line-height:1.5">'
+        '<p style="margin-top:.4rem;font-size:.66rem;color:#7b8aa1;line-height:1.5">'
         '마우스를 올리면 설명이 나온다 · '
         '<span style="display:inline-block;width:5px;height:5px;border-radius:50%;'
         'background:#4dbd8a;vertical-align:middle"></span> 이 경기에 나온 구종</p>'
