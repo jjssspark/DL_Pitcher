@@ -5,6 +5,9 @@
 
 ## 인덱스
 
+TS-037 (2026-08-13, ML/Infra, 심각도 Critical, 상태 해결됨)
+BiLSTM 예측이 영원히 "계산 중"에 멈춰 통계 폴백(FF 20%)만 보임 — `model.predict()`가 pyarrow/TF의 absl 심볼 충돌로 데드락, 그 뒤엔 `_SEQ_LEN=5` vs 모델 `(None,3,6)` shape 오류. 둘 다 예외가 dict에 갇혀 화면엔 "계산 중"으로만 보였음
+
 TS-036 (2026-08-11, CV, 심각도 Medium, 상태 해결됨 — 수치 정정)
 CV 정확도 76.7%(n=43)가 표본을 181구로 늘리자 66.4%(n=125)로 내려앉음 — 시연 중 본 투구만 채점돼 경기 초반에 치우친 표본이었음. 창 2개 전략으로 판정률 70% -> 76%
 
@@ -2724,3 +2727,138 @@ offset 0       21     19    90.5%
 **확보율과 정확도는 같이 봐야 한다.** 창을 옮겨 정확도가 내렸다고 후퇴할 뻔했다.
 어려운 공이 분모에 들어오면 조건부 정확도는 내려가는 게 정상이고, 봐야 할 건
 "던진 공 중 몇 개에 맞는 답이 나오는가"다.
+
+---
+
+## TS-037 · BiLSTM 예측이 영원히 "계산 중"에 멈춰 통계 폴백만 보였다
+
+날짜: 2026-08-13
+영역: ML/Infra
+심각도: Critical
+상태: 해결됨
+
+증상
+
+시연 중 사용자가 "1구 이후부터 제대로 측정 및 예측이 안 된다"고 보고했다. 화면에는
+어느 투구를 봐도 같은 예측이 떴다.
+
+```
+예측 · 통계 기반 예측 (BiLSTM 계산 중)
+FF 포심 패스트볼
+20% 신뢰도
+```
+
+`streamlit_app/.bilstm_cache/`는 비어 있었고, 앱 콘솔에는 아무 에러도 없었다.
+
+재현 조건
+
+앱을 띄우고 고정 데모(game_pk=775300)가 자동 로드되면 항상. 배지가 "BiLSTM 계산 중"
+에서 절대 바뀌지 않는다.
+
+원인
+
+두 개가 겹쳐 있었고, 앞의 것이 뒤의 것을 가리고 있었다.
+
+**근본 1 — `model.predict()`가 데드락에 걸렸다.** 155샘플 예측이 10분을 넘겨도 안
+끝났다. `ps`로 보면 CPU 0.1%에 STAT `S`(sleeping)였다 — 계산 중이 아니라 잠들어 있다.
+`sample`로 메인 스레드를 뜨니 tf.data prefetch 스레드가 absl Mutex에서 대기 중이다.
+
+```
+tensorflow::data::PrefetchDatasetOp::Dataset::Iterator::PrefetchThread(...)
+  absl::lts_20250814::Mutex::lock()  (in libtensorflow_framework.2.dylib)
+    ...
+      AbslInternalPerThreadSemWait_lts_20250814  (in libarrow.2400.dylib)
+        _pthread_cond_wait  (in libsystem_pthread.dylib)
+          __psynch_cvwait  (in libsystem_kernel.dylib)
+```
+
+**마지막 두 줄의 `libarrow`가 핵심이다.** TensorFlow가 쓰는 absl 동기화 심볼이
+TensorFlow 자신의 라이브러리가 아니라 pyarrow가 싣고 온 `libarrow.2400.dylib`에서
+해결되고 있다. pandas 3.x가 pyarrow를 끌고 오고, 그게 TF보다 먼저 로드된다. 서로 다른
+absl 두 벌이 한 프로세스에 올라와 mutex 구현이 어긋났다.
+
+**근본 2 — 시퀀스 길이가 모델과 안 맞았다.** predict를 우회하고 모델을 직접 호출하니
+그제서야 진짜 에러가 나왔다.
+
+```
+ValueError: Input 0 with name 'seq_input' of layer 'pitch_predictor' is incompatible
+with the layer: expected shape=(None, 3, 6), found shape=(155, 5, 6)
+```
+
+`precompute_bilstm()`의 `_SEQ_LEN = 5`인데 학습된 `models/pitch_predictor.h5`의
+`seq_input`은 `(None, 3, 6)`이다. 데드락이 없었어도 예측은 어차피 죽었다.
+
+**표면 — 둘 다 화면에 안 나왔다.** `_run_bilstm_bg()`가 예외를 `_bilstm_tasks` dict에만
+담고 아무 데도 안 알렸고, 앱은 `status == "done"`만 확인해 `"error"`는 무시했다.
+그래서 `bilstm_status`가 `"computing"`에 영구히 머물렀다.
+
+```python
+except Exception as e:
+    _bilstm_tasks[game_pk] = {"status": "error", "error": str(e)}   # 아무도 안 본다
+```
+
+시도했지만 안 된 것
+
+**영상이 안 도는 걸 원인으로 봤다.** 브라우저에서 `<video>`가 readyState 0에 멈춰
+있어 이걸 먼저 쫓았다. Range 요청을 curl·fetch로 검증했더니 둘 다 206에 15ms로
+정상이었고, 앞부분 25MB를 blob으로 만들어 먹여도 metadata가 안 올라왔다. 마지막에
+`document.hidden`을 찍어보니 `true`였다 — 자동화 탭이 백그라운드라 크롬이 미디어
+로딩을 미룬 것이고, 사용자 브라우저와 무관한 현상이었다. 여기서 30분을 썼다.
+
+**`다음 투구` 버튼도 먹통이라는 보고를 TS-027 재발로 봤다.** 실제로 눌러보니
+0 -> 1 -> 2로 정상 동작했고 슬라이더도 50까지 정확히 옮겨졌다. 버튼은 멀쩡했고,
+"예측이 안 바뀐다"가 "버튼이 안 먹는다"로 보였던 것이다.
+
+**print가 로그에 안 찍혀 한참 헤맸다.** `nohup ... > log`로 띄우면 stdout이 파일이라
+블록 버퍼링이 걸린다. streamlit 자체 로그(stderr)만 보이고 앱의 `print()`는 전부
+버퍼에 갇혀 있었다. `PYTHONUNBUFFERED=1`과 `python -u`를 붙이고 나서야 `[FixedDemo]`,
+`[SYNC]` 줄이 나왔다.
+
+해결
+
+`streamlit_app/app.py` 세 군데.
+
+1. `_SEQ_LEN = 5` -> `3` (모델 규격에 맞춤)
+2. `model.predict(...)` -> `model(..., training=False)` 직접 호출. tf.data를 아예 안
+   거치므로 데드락 경로가 사라진다. 155샘플이면 배치를 나눌 이유도 없다.
+3. 실패를 화면까지 올린다. `_run_bilstm_bg`에서 `traceback.print_exc()`, 앱에서
+   `status == "error"`면 `bilstm_status = "error"`, 배지 문구를 상태별로 분기.
+
+검증
+
+```
+$ ls -la streamlit_app/.bilstm_cache/
+-rw-r--r--  20481  8 13 12:17 775300.pkl
+
+total 320 | BiLSTM 채워짐 173
+예시 {'next_pitch': 'FF', 'confidence': 0.6858843564987183, ...}
+예측 분포: {'FF': 126, 'OTHER': 20, 'SL': 11, 'CH': 7, 'SI': 6, 'CU': 3}
+```
+
+브라우저 실측 — 8번째 투구에서 배지가 `예측 · BiLSTM 모델 예측 — 직전 투구 흐름 기반`,
+카드가 `OTHER 57% 신뢰도`, 확률 막대가 OTHER 57 / FF 22 / SL 17 / CH 4 / SI 1로 뜬다.
+고정 20%가 아니라 투구마다 값이 달라진다.
+
+추후 관리
+
+- **320구 중 173구만 BiLSTM이 나온다.** 나머지는 (a) 그 투수의 2025 학습 데이터가
+  없거나 — Cole(543037)·660813·664776 세 명, 합쳐서 120구 — (b) 시퀀스 3구가 아직 안
+  쌓인 구간(45구)이다. 설계상 그런 것이고 화면에도 "이 투수는 학습 이력 부족"으로
+  적었다. 없는 예측을 지어내지 않는다.
+- **pyarrow/absl 충돌은 우회했을 뿐 없앤 게 아니다.** tf.data를 쓰는 코드를 새로
+  넣으면 같은 자리에서 다시 멈춘다. 근본 해결은 import 순서를 고정하거나 pandas를
+  2.x로 내리는 쪽인데, 둘 다 부작용이 커서 지금은 안 건드린다.
+- `scaler.pkl`이 scikit-learn 1.8.0에서 저장됐는데 현재 1.9.0이라
+  `InconsistentVersionWarning`이 뜬다. 지금은 동작하지만 언젠가 깨진다.
+
+배운 점
+
+**예외를 dict에 담고 끝내면 그 기능은 조용히 죽는다.** `status: "error"`를 아무도
+읽지 않아서, 명백한 shape 오류가 "계산 중"이라는 정상적인 문구 뒤에 숨었다. 사용자
+눈에는 "예측이 이상하다"로만 보였고 원인을 찾는 데 도구 호출 40회가 넘게 들었다.
+백그라운드 작업의 실패는 최소한 콘솔에는 남기고, 화면 상태는 실패를 표현할 수 있어야
+한다.
+
+**"CPU를 안 쓰면서 안 끝나는 것"은 느린 게 아니라 멈춘 것이다.** 처음엔 155샘플
+예측이 오래 걸리나 싶어 기다렸는데, `ps`의 %CPU 0.1이 그게 아니라고 말해주고 있었다.
+`sample <pid>`로 스택을 뜨는 데는 2초면 된다.

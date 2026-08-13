@@ -638,7 +638,10 @@ def precompute_bilstm(game_pk: int, pitcher_id_tuple: tuple) -> list:
     from feature_engineering import build_features
 
     _LABEL_MAP  = {0:"FF", 1:"SI", 2:"FC", 3:"SL", 4:"CU", 5:"CH", 6:"FS", 7:"OTHER"}
-    _SEQ_LEN    = 5
+    # 학습된 모델의 seq_input이 (None, 3, 6)이다. 5로 두면 shape 오류로 예측이 통째로
+    # 죽는데, _run_bilstm_bg가 예외를 dict에만 담고 화면엔 안 올려서 "BiLSTM 계산 중"이
+    # 영원히 남고 통계 폴백(신뢰도 20%)만 보였다.
+    _SEQ_LEN    = 3
     _SEQ_COLS   = ["release_speed", "pfx_x", "pfx_z", "plate_x", "plate_z", "pitch_label"]
     _CTX_COLS   = [
         "balls", "strikes", "out_0", "out_1", "out_2",
@@ -706,16 +709,25 @@ def precompute_bilstm(game_pk: int, pitcher_id_tuple: tuple) -> list:
 
     results = [None] * len(df_game)
     if X_seq_list:
-        probs_all = model.predict(
+        # model.predict()가 아니라 모델을 직접 호출한다.
+        #
+        # predict()는 입력을 tf.data 파이프라인으로 감싸는데, 그 prefetch 스레드가
+        # absl Mutex에서 영구히 잠들었다 — 스택을 떠보면 absl 심볼이 TensorFlow가 아니라
+        # pyarrow가 싣고 온 libarrow에서 해결되고 있다(pandas 3.x가 pyarrow를 끌고 온다).
+        # 서로 다른 absl 두 벌이 한 프로세스에 올라와 동기화 primitive가 어긋난 것이다.
+        # 실측으로 155샘플 예측이 10분을 넘겨도 CPU 0.1%로 멈춰 있었다.
+        #
+        # 직접 호출은 tf.data를 아예 안 거친다. 155샘플이면 한 번에 올라가므로 배치를
+        # 나눌 이유도 없다.
+        probs_all = np.asarray(model(
             {
                 "seq_input":     np.array(X_seq_list),
                 "ctx_input":     np.array(X_ctx_list),
                 "pitcher_input": np.array(X_pit_list),
                 "batter_input":  np.array(X_bat_list),
             },
-            batch_size=64,
-            verbose=0,
-        )
+            training=False,
+        ))
         for game_i, b_i in game_to_batch:
             probs    = probs_all[b_i]
             next_idx = int(np.argmax(probs))
@@ -1136,6 +1148,10 @@ def _run_bilstm_bg(game_pk: int, pitcher_id_tuple: tuple) -> None:
         results = precompute_bilstm(game_pk, pitcher_id_tuple)
         _bilstm_tasks[game_pk] = {"status": "done", "results": results}
     except Exception as e:
+        # 여기서 삼키면 화면은 "BiLSTM 계산 중"에 영원히 멈춘다. 실제로 shape 오류를
+        # 이 자리에 가둬두는 바람에 원인을 찾는 데 한참 걸렸다 — 콘솔에는 남긴다.
+        import traceback
+        traceback.print_exc()
         _bilstm_tasks[game_pk] = {"status": "error", "error": str(e)}
 
 
@@ -1378,6 +1394,9 @@ if _gk_str and st.session_state.get("bilstm_status") == "computing":
         st.session_state.bilstm_preds  = _bt["results"]
         st.session_state.bilstm_status = "done"
         st.rerun()
+    elif _bt.get("status") == "error":
+        # 실패를 "계산 중"으로 남겨두면 영원히 기다리는 화면이 된다.
+        st.session_state.bilstm_status = "error"
 
 pitches   = st.session_state.game_pitches
 meta      = st.session_state.game_meta
@@ -2091,42 +2110,51 @@ if loaded:
                     + _cv_mark)
             elif _cv_vd:
                 # 궤적을 못 잡은 건 숨기지 않는다. 숨기면 정확도가 실제보다 좋아 보인다.
-                _cv_why = {"no_detections": "공 미감지", "no_trajectory": "궤적 없음",
-                           "too_few_points": "궤적 짧음"}.get(
+                _cv_why = {"no_detections": "공이 화면에서 안 잡힘", "no_trajectory": "궤적이 안 그려짐",
+                           "too_few_points": "궤적이 너무 짧음"}.get(
                                _cv_vd.get("reason", ""), _cv_vd.get("reason", "") or "사유 없음")
-                _cv_body = (f'<span style="color:#a6b3c6;font-size:.82rem">판정 불가</span>'
-                            f'<span style="color:#8a99b0;font-size:.7rem;margin-left:.35rem">{_cv_why}</span>')
+                _cv_body = (f'<span style="color:#8a99b0;font-size:.76rem">이 공은 영상으로 못 맞힘 '
+                            f'<span style="color:#6b7a91">· {_cv_why}</span></span>')
             elif not _cv_all:
-                _cv_body = ('<span style="color:#6b7a91;font-size:.78rem">'
+                _cv_body = ('<span style="color:#6b7a91;font-size:.76rem">'
                             '사전 판정 파일이 없다 — scripts/batch_cv_verdicts.py</span>')
             else:
-                _cv_body = ('<span style="color:#6b7a91;font-size:.78rem">'
-                            '판정 대상 아님 — 이 투구는 구속 표시가 안 잡혔다</span>')
+                _cv_body = ('<span style="color:#8a99b0;font-size:.76rem">'
+                            '이 공은 영상 판정 대상이 아님</span>')
 
+            # 위계를 뒤집는다. 예전에는 "판정 대상 아님" 안내가 카드에서 제일 크고 각주가
+            # 세 줄이라, 정작 이 카드의 결론인 적중률이 구석에 밀려 있었다. 적중률을
+            # 가장 크게 두고 근거는 한 줄로 줄인 뒤 나머지는 title 툴팁으로 넘긴다.
             if _cv_stat and _cv_stat["acc"] is not None:
-                _cv_rate = (f'{_cv_stat["acc"]:.1%} ({_cv_stat["hits"]}/{_cv_stat["scored"]})')
-                _cv_foot = (f'경기 전체 사전 판정 · 대상 {_cv_stat["attempted"]}구 중 '
-                            f'{_cv_stat["decided"]}구 판정({_cv_stat["decided"]/_cv_stat["attempted"]:.0%}) · '
-                            f'채점 {_cv_stat["scored"]}구 (OFFSPEED 제외) · '
-                            f'기준선 {_cv_stat["baseline"]:.1%}')
+                _cv_rate  = f'{_cv_stat["acc"]:.1%}'
+                _cv_sub   = f'{_cv_stat["hits"]}/{_cv_stat["scored"]}구'
+                _cv_foot  = (f'무작정 한쪽으로 찍으면 {_cv_stat["baseline"]:.1%} · '
+                             f'이번 경기 {_cv_stat["decided"]}/{_cv_stat["attempted"]}구 판정')
+                _cv_tip   = (f'Statcast API 없이 중계 영상 궤적만으로 속구/변화구를 가른 결과. '
+                             f'대상 {_cv_stat["attempted"]}구 중 {_cv_stat["decided"]}구 판정, '
+                             f'그중 {_cv_stat["scored"]}구 채점(OFFSPEED는 2분류로 표현 불가라 제외). '
+                             f'기준선 {_cv_stat["baseline"]:.1%}')
             else:
-                _cv_rate = '—'
-                _cv_foot = '미학습 경기 원본 영상 · 속구 vs 변화구 2분류'
+                _cv_rate, _cv_sub = '—', ''
+                _cv_foot = '속구 vs 변화구 2분류'
+                _cv_tip  = 'Statcast API 없이 중계 영상 궤적만으로 구종을 가른다'
 
             st.markdown(
-                f'<div style="margin-top:.45rem;padding:.5rem .65rem;border-radius:10px;'
-                f'background:rgba(23,32,54,.5);border:1px solid rgba(77,189,138,.18)">'
-                f'<div style="display:flex;align-items:baseline;justify-content:space-between;gap:.5rem">'
+                f'<div title="{_cv_tip}" style="margin:.45rem 0 .7rem;padding:.55rem .7rem;'
+                f'border-radius:10px;background:rgba(23,32,54,.5);'
+                f'border:1px solid rgba(77,189,138,.18)">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem">'
                 f'<span style="font-size:.62rem;font-weight:700;letter-spacing:.08em;'
                 f'text-transform:uppercase;color:#8a99b0">영상만으로 · CV'
                 f'<span style="margin-left:.35rem;padding:.05rem .3rem;border-radius:4px;'
                 f'background:rgba(77,189,138,.14);color:#4dbd8a;font-size:.58rem;'
                 f'letter-spacing:0">사전 판정</span></span>'
-                f'<span style="font-size:.66rem;font-weight:700;color:#4dbd8a">{_cv_rate}</span>'
+                f'<span style="display:flex;align-items:baseline;gap:.28rem;white-space:nowrap">'
+                f'<span style="font-size:1.05rem;font-weight:800;color:#4dbd8a;line-height:1">{_cv_rate}</span>'
+                f'<span style="font-size:.6rem;color:#7b8aa1">{_cv_sub}</span></span>'
                 f'</div>'
-                f'<div style="margin-top:.2rem">{_cv_body}</div>'
-                f'<div style="margin-top:.3rem;font-size:.58rem;color:#7b8aa1;line-height:1.5">'
-                f'{_cv_foot}</div>'
+                f'<div style="margin-top:.3rem">{_cv_body}</div>'
+                f'<div style="margin-top:.28rem;font-size:.58rem;color:#7b8aa1">{_cv_foot}</div>'
                 f'</div>',
                 unsafe_allow_html=True)
 
@@ -2143,7 +2171,16 @@ if loaded:
                 _cf  = pred["confidence"]
                 _cc  = "#34d399" if _cf >= 0.45 else "#f59e0b" if _cf >= 0.3 else "#f87171"
 
-                _pred_basis = "BiLSTM 모델 예측 — 직전 투구 흐름 기반" if _bilstm_res else "통계 기반 예측 (BiLSTM 계산 중)"
+                if _bilstm_res:
+                    _pred_basis = "BiLSTM 모델 예측 — 직전 투구 흐름 기반"
+                elif st.session_state.get("bilstm_status") == "error":
+                    _pred_basis = "통계 기반 예측 (BiLSTM 실패 — 콘솔 로그 확인)"
+                elif st.session_state.get("bilstm_status") == "done":
+                    # 모델이 다 돌았는데도 이 구에 값이 없는 경우다. 그 투수의 2025 학습
+                    # 데이터가 없거나(교체 투수) 시퀀스 3구가 아직 안 쌓인 구간이다.
+                    _pred_basis = "통계 기반 예측 (이 투수는 학습 이력 부족)"
+                else:
+                    _pred_basis = "통계 기반 예측 (BiLSTM 계산 중)"
                 if st.session_state.pred_streak >= 2:
                     st.markdown(
                         f'<div class="combo-badge">🔥 COMBO x{st.session_state.pred_streak}</div>',
