@@ -29,6 +29,25 @@ PitchIQ는 여기서 한발 더 나가 "다음엔 어떤 공을 던질까?"를 A
 
 ## 🚀 Live Demo
 
+### 데모 영상 (1분)
+
+**[▶ youtu.be/XnbVtPsR3V8](https://youtu.be/XnbVtPsR3V8)**
+
+로컬에서 실제로 돌아가는 화면을 녹화한 것입니다. 설치 없이 이것만 봐도 전체 흐름이 보입니다.
+
+| 시각 | 내용 |
+|---|---|
+| 0:03 | Statcast 데이터 · 중계 영상 · 예측을 한 화면에 |
+| 0:06 | 구종 10종을 Statcast 실측 무브먼트(`pfx_x`·`pfx_z`)로 표현 |
+| 0:14 | 방금 던진 공 채점 — 직전 예측이 맞았는지 그 자리에서 |
+| 0:28 | 영상만으로 낸 구종 판정 (YOLOv8 궤적) — 적중 |
+| 0:36 | 같은 판정의 오답 사례 — 채점 125구 66.4% · 기준선 53.6% |
+| 0:54 | 투수별 구종 분포와 누적 통계 |
+
+영상 편집은 [`scripts/build_demo.py`](scripts/build_demo.py)로 재현할 수 있습니다.
+
+### 배포된 앱
+
 **[pitchiq-dlpitcher.streamlit.app](https://pitchiq-dlpitcher.streamlit.app/)**
 
 사이드바에 `game_pk`(예: `745735`)를 입력하면 실제 MLB Statcast 데이터를 불러와 다음 구종을 실시간으로 예측합니다.
