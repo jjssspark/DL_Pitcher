@@ -35,9 +35,28 @@ st.markdown("""<style>
   background-attachment:fixed}
 [data-testid="stSidebar"]{background:rgba(30,41,68,.97)!important;border-right:1px solid rgba(96,165,250,.2)}
 
+/* 가로 스크롤을 원천 차단한다.
+   실측 — 사용자 창이 약 1000 CSS px였는데 우측 패널 안에 min-width와 nowrap이 걸린
+   요소가 있어 본문이 뷰포트보다 넓어졌다. 가로 스크롤이 생기자 왼쪽으로 스크롤된
+   상태가 되어 사이드바의 "PitchIQ"와 "MLB"가 잘려 보였다. 넘칠 수 있는 곳을
+   먼저 없앴지만(아래 min-width:0 / word-break), 새 요소가 또 넘치더라도 화면이
+   깨지지 않도록 문서 레벨에서 한 번 더 막는다. */
+html,body{max-width:100%;overflow-x:hidden}
+[data-testid="stAppViewContainer"]{overflow-x:hidden}
+
+/* 사이드바를 좁힌다. 300px 고정이라 1000px 창에서는 본문에 700px밖에 안 남고,
+   그 700을 영상과 우측 패널이 나눠 가지면 패널이 200px로 짓눌린다. */
+section[data-testid="stSidebar"]{width:clamp(206px,16vw,272px)!important;
+  min-width:clamp(206px,16vw,272px)!important;max-width:clamp(206px,16vw,272px)!important}
+
 /* 글씨가 작고 다닥다닥 붙어 보였다. 크기가 거의 rem이라 루트를 키우면 글자와 여백이
-   같이 늘어난다 — 인라인 style이 수십 군데라 개별로 고치는 것보다 이쪽이 확실하다. */
-html{font-size:17.5px}
+   같이 늘어난다 — 인라인 style이 수십 군데라 개별로 고치는 것보다 이쪽이 확실하다.
+
+   같은 이유로 좁은 창에서는 루트를 줄인다. 17.5px 고정이었을 때 1000px 창에도
+   1600px과 똑같은 크기의 글자·여백이 들어가 카드가 서로 붙고 글자가 두 줄로 접혔다
+   — "겹치고 다닥다닥"의 실제 원인이다. 폭에 비례시키면 어느 창에서든 같은 비율로
+   보인다. 1000px에서 14.5px, 1600px 이상에서 17.5px. */
+html{font-size:clamp(14px,.5vw + 9.5px,17.5px)}
 html,body,[class*="css"]{font-family:'Inter',-apple-system,sans-serif;color:#eef2f8;
   line-height:1.65;letter-spacing:.005em}
 #MainMenu,footer,header{visibility:hidden}
@@ -165,8 +184,8 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .player-sub{font-size:.74rem;color:#93a1b6}
 
 /* 방금 던진 구종은 오른쪽 열의 주인공이다. 왼쪽에 구종 색 띠를 세운다. */
-.pitch-card{border-left-width:3px;padding:1.05rem 1.15rem}
-.pitch-code{font-size:2.7rem}
+.pitch-card{border-left-width:3px;padding:.85rem 1rem}
+.pitch-code{font-size:2.1rem}
 .pitch-name{font-size:.8rem;color:#b3bdcd}
 
 /* 통계 카드는 숫자만 남긴다 */
@@ -180,11 +199,13 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
    작은 라벨들은 아예 한 단 키운다 — .58~.62rem은 읽으라고 만든 크기가 아니다. */
 .panel{padding:1.25rem 1.4rem;margin-bottom:1.05rem}
 
-/* 우측 열이 다닥다닥 붙어 있다는 지적. 카드 사이를 벌리고 안쪽 여백도 키운다.
-   Streamlit이 요소 사이에 주는 간격이 작아 카드 자신의 margin으로 벌려야 한다. */
+/* 우측 열이 다닥다닥 붙어 있다는 지적으로 한 번 벌렸다가, "예측 카드까지 스크롤
+   없이 보이게"로 조였더니 이번엔 겹쳐 보였다. 세로를 아끼는 방법을 바꿨다 —
+   간격을 깎는 대신 영상 열을 좁혀(아래 st.columns) 영상 높이를 줄였다. 16:9라
+   폭 100px을 양보하면 세로 56px이 그냥 생긴다. 간격은 읽을 수 있는 값으로 되돌린다. */
 .panel-secondary{padding:1.2rem 1.3rem;margin-bottom:1.1rem;border-radius:12px}
-[data-testid="stVerticalBlock"]{gap:.75rem}
-.pitch-card{margin-bottom:1rem}
+[data-testid="stVerticalBlock"]{gap:.85rem}
+.pitch-card{margin-bottom:.85rem}
 .panel-title{font-size:.74rem;letter-spacing:.12em;color:#93a1b6;margin-bottom:.7rem}
 .player-sub{font-size:.82rem}
 .pitch-row{padding:.55rem .8rem;margin-bottom:.34rem;font-size:.88rem}
@@ -196,7 +217,7 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
 .pl-note{font-size:.76rem;line-height:1.65}
 .pl-en{font-size:.68rem}
 .pl-speed{font-size:1rem}
-.scoreboard{padding:1.1rem 1.4rem 1rem;margin-bottom:1.05rem}
+.scoreboard{padding:.7rem 1.3rem .6rem;margin-bottom:.6rem}
 .stitch-divider{margin:1rem 0!important}
 
 /* 보조 카드 / 카드 배지 */
@@ -204,25 +225,75 @@ div[data-testid="stButton"]>button:hover{opacity:.82!important}
   border-radius:10px;padding:.8rem 1rem;margin-bottom:.65rem}
 .panel-secondary .panel-title{font-size:.66rem}
 .card-badge{display:inline-flex;align-items:center;gap:.3rem;font-size:.66rem;font-weight:700;
-  letter-spacing:.06em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;margin-bottom:.4rem}
+  letter-spacing:.06em;text-transform:uppercase;padding:.15rem .5rem;border-radius:999px;
+  margin-bottom:.85rem;max-width:100%;white-space:normal;line-height:1.35;text-align:left}
 .card-badge-pred{background:rgba(167,139,250,.14);color:#c4b5fd;border:1px solid rgba(167,139,250,.35)}
 .card-badge-actual{background:rgba(52,211,153,.12);color:#6ee7b7;border:1px solid rgba(52,211,153,.3)}
-.pred-hero{border-width:1.5px!important;padding:1.3rem 1.5rem!important}
-.pred-hero .pitch-code{font-size:3rem!important}
+.pred-hero{border-width:1.5px!important;padding:.85rem 1.1rem!important}
+.pred-hero .pitch-code{font-size:2.2rem!important}
 
 /* 게임 HUD — 원형 신뢰도 게이지 */
-.conf-gauge{width:84px;height:84px;border-radius:50%;position:relative;flex-shrink:0;
+/* px가 아니라 rem이다. px로 두면 루트가 줄어드는 좁은 창에서 이것만 안 줄어들어
+   예측 카드의 글자 칸을 잡아먹는다(구종명이 "포심 패스트 / 볼"로 접혔다). */
+.conf-gauge{width:4rem;height:4rem;border-radius:50%;position:relative;flex-shrink:0;
   background:conic-gradient(var(--gauge-color) calc(var(--pct) * 3.6deg), rgba(255,255,255,.08) 0deg);
   display:flex;flex-direction:column;align-items:center;justify-content:center}
-.conf-gauge::before{content:"";position:absolute;inset:9px;border-radius:50%;background:#1b2540}
+.conf-gauge::before{content:"";position:absolute;inset:.45rem;border-radius:50%;background:#1b2540}
 .conf-gauge>*{position:relative;z-index:1}
 .conf-gauge-code{font-size:1.25rem;font-weight:900;line-height:1}
 .conf-gauge-pct{font-size:.6rem;font-weight:700;color:#cbd5e1;margin-top:.1rem}
 
+/* ── 투수·타자·주자 카드 ──────────────────────────────────────────
+   좁은 열에 세 정보를 밀어넣으니 글자를 줄일 수밖에 없어 다닥다닥해 보였다.
+   그래서 두 층으로 나눈다 — 평소엔 읽을 수 있는 최소한만 크게 보여주고, 마우스를
+   올리면 화면 가운데에 큰 카드로 펼친다. 구종 범례가 이미 같은 방식이라 조작이
+   따로 배울 것 없이 일관된다. */
+/* 팝업은 position:fixed지만 조상에 overflow:hidden이 걸리면 그래도 잘린다.
+   본문 가로 스크롤을 막으려고 넣은 overflow-x:hidden이 그 역할을 하므로,
+   이 카드가 들어앉는 열 컨테이너에는 clip을 걸지 않는다. */
+[data-testid="stVerticalBlock"],[data-testid="column"]{overflow:visible}
+.mu-wrap{cursor:default}
+/* 힌트는 절대배치하면 안 된다 — right/bottom에 띄웠더니 내야 그림 밑의
+   "루상 비어 있음" 글자 위에 겹쳐 앉았다. 카드 안쪽 마지막 줄로 흘려보낸다. */
+.mu-hint{margin-top:.7rem;padding-top:.55rem;border-top:1px solid rgba(148,163,184,.1);
+  font-size:.62rem;color:#6b7a91;text-align:right}
+.mu-wrap:hover .panel-secondary{border-color:rgba(96,165,250,.4)}
+.mu-wrap:hover .mu-hint{color:#93a1b6}
+
+/* 오버레이 자신이 딤이고, 그 안에서 카드만 확대된다. 우측 열 폭에 안 갇힌다.
+   딤을 자식 div로 두면 안 된다 — 부모에 transform이 걸려 있으면 자식
+   position:fixed의 기준이 뷰포트가 아니라 그 부모 박스가 되어, 딤이 팝업 크기만
+   덮고 화면 전체는 그대로 밝았다(실측). 그래서 fixed 요소에는 transform을 걸지
+   않고, 확대는 안쪽 카드에만 준다. */
+.mu-pop{position:fixed;inset:0;z-index:9998;
+  display:flex;align-items:center;justify-content:center;
+  background:rgba(8,13,24,.62);backdrop-filter:blur(3px);
+  opacity:0;pointer-events:none;visibility:hidden;
+  transition:opacity .18s ease,visibility 0s linear .2s}
+.mu-wrap:hover .mu-pop{opacity:1;visibility:visible;transition-delay:0s}
+.mu-inner{width:min(540px,86vw);max-height:88vh;overflow:auto;
+  background:linear-gradient(180deg,#26324f,#1d2740);
+  border:1px solid rgba(148,163,184,.22);border-radius:16px;
+  padding:1.5rem 1.7rem 1.6rem;box-shadow:0 28px 70px rgba(0,0,0,.55);
+  transform:scale(.965);transition:transform .22s cubic-bezier(.2,.8,.3,1)}
+.mu-wrap:hover .mu-inner{transform:scale(1)}
+.mu-hd{font-size:.68rem;font-weight:700;letter-spacing:.14em;text-transform:uppercase;
+  color:#7b8aa1;margin-bottom:1rem}
+.mu-grid{display:flex;align-items:flex-start;gap:1.4rem;flex-wrap:wrap}
+.mu-side{flex:1 1 220px;min-width:0;display:flex;flex-direction:column;gap:1rem}
+.mu-lbl{font-size:.7rem;letter-spacing:.1em;text-transform:uppercase;color:#93a1b6;
+  margin-bottom:.2rem}
+.mu-nm{font-size:1.5rem;font-weight:800;line-height:1.2;overflow-wrap:anywhere}
+.mu-sub{font-size:.86rem;color:#a6b3c6;margin-top:.15rem}
+.mu-runner{flex:0 0 auto;text-align:center}
+.mu-foot{margin-top:1.15rem;padding-top:.95rem;border-top:1px solid rgba(148,163,184,.14);
+  display:flex;gap:1.5rem;flex-wrap:wrap;font-size:.84rem;color:#cbd5e1}
+.mu-foot b{color:#f1f5f9;font-weight:800}
+
 /* 게임 HUD — COMBO 스트릭 배지 */
 .combo-badge{display:inline-flex;align-items:center;gap:.3rem;padding:.2rem .6rem;border-radius:999px;
   background:rgba(251,191,36,.16);border:1px solid rgba(251,191,36,.4);color:#fbbf24;
-  font-size:.72rem;font-weight:800;letter-spacing:.03em;margin-bottom:.4rem;
+  font-size:.72rem;font-weight:800;letter-spacing:.03em;margin-bottom:.7rem;
   animation:comboPop .35s ease-out}
 @keyframes comboPop{0%{transform:scale(.6);opacity:0}60%{transform:scale(1.12);opacity:1}100%{transform:scale(1)}}
 
@@ -877,7 +948,10 @@ def _diamond_svg(on_1b: bool, on_2b: bool, on_3b: bool, size: int = 118) -> str:
                 f'fill="{fill}" transform="rotate(45,{x},{y})"/>')
 
     return (
-        f'<svg width="{size}" height="{size}" viewBox="0 0 120 120" style="flex-shrink:0">'
+        # width/height는 px로 두되 CSS로 상한만 건다. 좁은 창에서 이 그림이 안 줄어들면
+        # 옆 이름 칸이 짓눌려 글자가 세로로 서거나 패널이 뷰포트를 넘긴다.
+        f'<svg width="{size}" height="{size}" viewBox="0 0 120 120" '
+        f'style="flex-shrink:1;max-width:{size}px;width:100%;height:auto">'
         # 잔디 -> 내야 흙 -> 베이스 패스 순으로 깐다
         '<path d="M60 8 L112 60 L60 112 L8 60 Z" fill="rgba(52,211,153,.07)"/>'
         '<path d="M60 20 L100 60 L60 100 L20 60 Z" fill="rgba(180,120,70,.16)"/>'
@@ -1640,7 +1714,10 @@ _OCR_TO_CODE = {
 
 # ══ 메인 레이아웃 ═════════════════════════════════════════════════
 if loaded:
-    col_video, col_panel = st.columns([3.2, 1.2], gap="medium")
+    # 영상 열을 좁히는 게 세로를 버는 가장 싼 방법이다. 영상은 16:9라 폭이 줄면
+    # 높이가 그 56%만큼 같이 준다 — 우측 패널은 그만큼 여유가 생기고, 간격을 깎아
+    # 다닥다닥해 보이게 만들 필요가 없어진다. 1000px 창 실측 기준으로 잡았다.
+    col_video, col_panel = st.columns([2.5, 1.5], gap="medium")
 else:
     col_video = col_panel = None
 
@@ -1786,7 +1863,10 @@ if loaded:
                 st.caption(f"{_pitch_label}{_sync_note}")
 
             # 슬라이더 (투구 타임라인)
-            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#8a99b0;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 .1rem">투구 타임라인</p>', unsafe_allow_html=True)
+            # 아래 여백이 .1rem이었을 때 슬라이더가 손잡이 위에 띄우는 현재값("0")이
+            # 이 제목 글자를 그대로 덮었다. 값 라벨은 트랙 위쪽 바깥에 절대배치되므로
+            # 제목이 그만큼 비켜줘야 한다.
+            st.markdown('<p style="font-size:.72rem;font-weight:700;color:#8a99b0;letter-spacing:.09em;text-transform:uppercase;margin:.5rem 0 1.15rem">투구 타임라인</p>', unsafe_allow_html=True)
             # 이동은 전부 on_click/on_change 콜백으로 처리한다.
             #
             # st.button()의 반환값으로 처리하면 안 된다. 이 앱은 영상 재생 중 여러
@@ -1933,37 +2013,80 @@ if loaded:
 
             # ── 투수 / 타자 정보 ──
             batting_team = cur["away_team"] if cur["inning_topbot"] == "Top" else cur["home_team"]
+            # 이름 두 줄(좌) + 내야 그림(우)을 한 행에 놓는다. 예전엔 이름 아래 주자
+            # 행을 따로 둬서 카드가 ~275px였고, 그만큼 예측 카드가 화면 밖으로 밀렸다 —
+            # "예측 구종까지 스크롤 없이"가 요구라 이 카드가 제일 먼저 줄어야 한다.
+            _runner_cnt = sum((cur["on_1b"], cur["on_2b"], cur["on_3b"]))
+            _runner_txt = (" · ".join(n for n, on in (("1루", cur["on_1b"]), ("2루", cur["on_2b"]),
+                                                      ("3루", cur["on_3b"])) if on)
+                           or "루상 비어 있음")
+            _half_kor = "초" if cur["inning_topbot"] == "Top" else "말"
             st.markdown(
+                f'<div class="mu-wrap">'
                 f'<div class="panel-secondary">'
-                f'<div class="panel-title">투수 · 타자</div>'
-                f'<div style="display:flex;flex-direction:column;gap:.9rem;margin-bottom:1rem">'
+                # flex-wrap — 열이 좁으면 그림이 이름 밑으로 내려간다. 안 그러면 그림이
+                # flex-shrink:0이라 이름 칸이 몇 px로 짓눌려 글자가 세로로 선다(실측).
+                #
+                # min-width는 0이어야 한다. 150px을 주면 좁은 창에서 이 칸이 안 줄어들어
+                # 패널 전체가 뷰포트보다 넓어지고, 문서에 가로 스크롤이 생겨 왼쪽이
+                # 잘려 보였다. 줄바꿈으로 흡수시키는 게 맞다.
+                f'<div style="display:flex;align-items:center;gap:1rem;flex-wrap:wrap">'
+                f'<div style="flex:1 1 140px;display:flex;flex-direction:column;gap:.75rem;min-width:0">'
                 f'<div style="border-left:3px solid #60a5fa;padding-left:.7rem">'
-                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
-                f'color:#93a1b6;margin-bottom:.15rem">투수</div>'
-                f'<div style="font-size:1.32rem;font-weight:800;color:#60a5fa;line-height:1.25">'
-                f'{cur["pitcher_name"]}</div>'
-                f'<div style="font-size:.82rem;color:#a6b3c6">{cur["pitcher_hand"]}구</div>'
+                f'<div style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;'
+                f'color:#93a1b6">투수</div>'
+                f'<div style="font-size:1.22rem;font-weight:800;color:#60a5fa;line-height:1.25;'
+                f'overflow-wrap:anywhere">'
+                f'{cur["pitcher_name"]} <span style="font-size:.78rem;font-weight:600;'
+                f'color:#a6b3c6;white-space:nowrap">{cur["pitcher_hand"]}구</span></div>'
                 f'</div>'
                 f'<div style="border-left:3px solid #cbd5e1;padding-left:.7rem">'
-                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
-                f'color:#93a1b6;margin-bottom:.15rem">타자 · {batting_team}</div>'
-                f'<div style="font-size:1.32rem;font-weight:800;color:#f1f5f9;line-height:1.25">'
-                f'{cur["batter_name"]}</div>'
-                f'<div style="font-size:.82rem;color:#a6b3c6">{cur["batter_hand"]}타</div>'
+                f'<div style="font-size:.66rem;letter-spacing:.1em;text-transform:uppercase;'
+                f'color:#93a1b6">타자 · {batting_team}</div>'
+                f'<div style="font-size:1.22rem;font-weight:800;color:#f1f5f9;line-height:1.25;'
+                f'overflow-wrap:anywhere">'
+                f'{cur["batter_name"]} <span style="font-size:.78rem;font-weight:600;'
+                f'color:#a6b3c6;white-space:nowrap">{cur["batter_hand"]}타</span></div>'
                 f'</div></div>'
-                # 주자 — 내야 그림 하나로 충분하다. 옆에 "○ 1루" 목록을 두면 같은 정보를
-                # 두 번 읽게 되고, 그림이 그만큼 작아진다.
-                f'<div style="display:flex;align-items:center;gap:1rem">'
-                f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"])}'
-                f'<div>'
-                f'<div style="font-size:.72rem;letter-spacing:.1em;text-transform:uppercase;'
-                f'color:#93a1b6">주자</div>'
-                f'<div style="font-size:1.15rem;font-weight:800;color:#fbbf24;line-height:1.4">'
-                f'{sum((cur["on_1b"], cur["on_2b"], cur["on_3b"])) or "없음"}'
-                f'{"명" if any((cur["on_1b"], cur["on_2b"], cur["on_3b"])) else ""}</div>'
-                f'<div style="font-size:.78rem;color:#a6b3c6">'
-                f'{" · ".join(n for n, on in (("1루", cur["on_1b"]), ("2루", cur["on_2b"]), ("3루", cur["on_3b"])) if on) or "루상 비어 있음"}'
-                f'</div></div></div></div>',
+                # 주자 — 내야 그림 하나로 충분하다. 텍스트는 그림 밑에 한 줄만.
+                f'<div style="text-align:center;flex:0 1 96px;min-width:64px">'
+                f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"], size=96)}'
+                f'<div style="font-size:.72rem;color:#a6b3c6;margin-top:.15rem">'
+                f'주자 <span style="color:#fbbf24;font-weight:800">{_runner_cnt or "없음"}'
+                f'{"명" if _runner_cnt else ""}</span></div>'
+                f'<div style="font-size:.64rem;color:#8a99b0">{_runner_txt}</div>'
+                f'</div></div>'
+                f'<div class="mu-hint">마우스를 올리면 크게 보인다</div>'
+                f'</div>'  # /panel-secondary
+                # ── 호버 팝업 ──
+                f'<div class="mu-pop"><div class="mu-inner">'
+                f'<div class="mu-hd">{cur["inning"]}회 {_half_kor} · '
+                f'{cur["away_team"]} {cur["away_score"]} : {cur["home_score"]} {cur["home_team"]}</div>'
+                f'<div class="mu-grid">'
+                f'<div class="mu-side">'
+                f'<div style="border-left:3px solid #60a5fa;padding-left:.85rem">'
+                f'<div class="mu-lbl">투수</div>'
+                f'<div class="mu-nm" style="color:#60a5fa">{cur["pitcher_name"]}</div>'
+                f'<div class="mu-sub">{cur["pitcher_hand"]}구</div></div>'
+                f'<div style="border-left:3px solid #cbd5e1;padding-left:.85rem">'
+                f'<div class="mu-lbl">타자 · {batting_team}</div>'
+                f'<div class="mu-nm" style="color:#f1f5f9">{cur["batter_name"]}</div>'
+                f'<div class="mu-sub">{cur["batter_hand"]}타</div></div>'
+                f'</div>'
+                f'<div class="mu-runner">'
+                f'{_diamond_svg(cur["on_1b"], cur["on_2b"], cur["on_3b"], size=168)}'
+                f'<div style="font-size:.98rem;color:#a6b3c6;margin-top:.4rem">주자 '
+                f'<span style="color:#fbbf24;font-weight:800">{_runner_cnt or "없음"}'
+                f'{"명" if _runner_cnt else ""}</span></div>'
+                f'<div style="font-size:.82rem;color:#8a99b0">{_runner_txt}</div>'
+                f'</div></div>'
+                f'<div class="mu-foot">'
+                f'<span>볼카운트 <b>{cur["balls"]}-{cur["strikes"]}</b></span>'
+                f'<span>아웃 <b>{cur["outs"]}</b></span>'
+                f'<span>이 경기 <b>{c_idx}/{len(pitches)}구</b></span>'
+                f'</div>'
+                f'</div></div>'  # /mu-inner /mu-pop
+                f'</div>',       # /mu-wrap
                 unsafe_allow_html=True)
 
             # ── 현재 타석 상황 (투구 결과 실시간) ──
@@ -2004,15 +2127,24 @@ if loaded:
                         f'border-radius:50%;background:{_dot_c};margin-right:3px"></span>'
                     )
                 st.markdown(
-                    f'<div style="display:flex;align-items:center;gap:.5rem;margin-bottom:.5rem">'
-                    f'<span style="font-size:.68rem;color:#8a99b0;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
+                    f'<div style="display:flex;align-items:center;gap:.5rem;margin:.15rem 0 .7rem">'
+                    f'<span style="font-size:.72rem;color:#8a99b0;white-space:nowrap">타석 {_ab_pitch_n}구</span>'
                     f'<div>{_dots_html}</div>'
                     f'</div>',
                     unsafe_allow_html=True)
 
             # ── 방금 던진 구종 ──
-            st.markdown('<div class="card-badge card-badge-actual">실측</div>', unsafe_allow_html=True)
-            st.markdown('<div class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:#8a99b0;margin-bottom:.35rem">방금 던진 구종</div>', unsafe_allow_html=True)
+            # 배지와 제목을 한 줄에 — 따로 두면 st.markdown 두 개가 세로로 쌓여 ~25px를
+            # 더 먹고, 그만큼 아래 예측 카드가 화면 밖으로 밀린다.
+            # 아래 여백은 이 줄에서 준다. .1rem이었을 때 "실측" 알약의 밑변이 바로 아래
+            # 카드의 윗선에 닿아 겹쳐 보였다. Streamlit 컨테이너 gap은 요소 사이에
+            # 항상 걸리는 값이 아니라 여기서 직접 벌리는 게 확실하다.
+            st.markdown(
+                '<div style="display:flex;align-items:center;gap:.45rem;margin:.1rem 0 .85rem">'
+                '<span class="card-badge card-badge-actual" style="margin-bottom:0">실측</span>'
+                '<span class="panel-title" style="font-size:.72rem;font-weight:700;letter-spacing:.1em;'
+                'text-transform:uppercase;color:#8a99b0;margin-bottom:0">방금 던진 구종</span>'
+                '</div>', unsafe_allow_html=True)
 
             _vpd = st.session_state.get("video_pitch_data", [])
             _ocr_i = c_idx - 1 if c_idx > 0 else -1
@@ -2140,12 +2272,12 @@ if loaded:
                 _cv_tip  = 'Statcast API 없이 중계 영상 궤적만으로 구종을 가른다'
 
             st.markdown(
-                f'<div title="{_cv_tip}" style="margin:.45rem 0 .7rem;padding:.55rem .7rem;'
+                f'<div title="{_cv_tip}" style="margin:.2rem 0 .85rem;padding:.7rem .8rem;'
                 f'border-radius:10px;background:rgba(23,32,54,.5);'
                 f'border:1px solid rgba(77,189,138,.18)">'
-                f'<div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem">'
+                f'<div style="display:flex;align-items:center;justify-content:space-between;gap:.6rem;flex-wrap:wrap">'
                 f'<span style="font-size:.62rem;font-weight:700;letter-spacing:.08em;'
-                f'text-transform:uppercase;color:#8a99b0">영상만으로 · CV'
+                f'text-transform:uppercase;color:#8a99b0;white-space:nowrap">영상만으로 · CV'
                 f'<span style="margin-left:.35rem;padding:.05rem .3rem;border-radius:4px;'
                 f'background:rgba(77,189,138,.14);color:#4dbd8a;font-size:.58rem;'
                 f'letter-spacing:0">사전 판정</span></span>'
