@@ -187,7 +187,7 @@ baseball-pitch-predictor/
 │   └── fixed_demo_*.json         # 사전 계산 결과 (판정 · 앵커 · 스캔)
 ├── tests/                        # pytest 115개
 ├── docs/
-│   ├── TROUBLESHOOTING.md       # 문제 해결 기록 37건 (실패한 시도 포함)
+│   ├── TROUBLESHOOTING.md       # 문제 해결 기록 38건 (실패한 시도 포함)
 │   ├── ADR.md                    # 설계 결정 기록
 │   ├── ROADMAP.md
 │   └── blog/                     # Day1 · Day2 기술 블로그
@@ -271,7 +271,7 @@ Statcast → BiLSTM 배치 추론  → 예측 캐시 (.bilstm_cache/*.pkl)
 
 문제를 어떻게 좁혀 나갔는지가 남아 있는 문서입니다.
 
-- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — 해결 기록 37건.
+- [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) — 해결 기록 38건.
   증상 / 재현 조건 / 표면·근본 원인 / **시도했지만 안 된 것** / 해결 / 검증 순으로 씁니다.
   틀린 가설과 잘못 짚은 방향도 그대로 남겼습니다.
 - [`docs/ADR.md`](docs/ADR.md) — 설계 결정과 그 근거.
