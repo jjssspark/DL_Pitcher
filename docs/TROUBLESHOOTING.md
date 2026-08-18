@@ -5,6 +5,9 @@
 
 ## 인덱스
 
+TS-039 (2026-08-18, Infra, 심각도 High, 상태 해결됨)
+서비스가 실제로 쓰는 공 탐지기 ball_broadcast_v1.pt가 저장소에 없었다 — .gitignore의 `*.pt` 차단에 예외를 추가하지 않아 8월 6일 모델 교체 이후 계속 빠져 있었고, 앱은 사전 계산 JSON을 읽어 화면상 정상으로 보였다
+
 TS-038 (2026-08-15, 문서/리포트, 심각도 Low, 상태 해결됨)
 PDF로 뽑은 슬라이드에서 버튼의 흐린 그림자가 파란 사각형 덩어리로 찍힘 — 인쇄 래스터화에서 blur가 날아가고 음수 spread로 줄여 둔 원래 사각형이 드러남. `@media print`에서 blur 그림자를 끄고 링 형태만 남김
 
@@ -2941,3 +2944,80 @@ MediaBox는 960×540pt(=1280×720px, 16:9)로 슬라이드 1장당 1페이지가
 합성에 기대는 효과는 인쇄에서 다르게 나오거나 통째로 무시된다. PDF가 산출물이면
 PDF를 실제로 뽑아서 확인해야 하고, 그때 미리보기 해상도가 낮으면 없는 문제를
 쫓게 된다.
+
+---
+
+## TS-039 · 서비스가 쓰는 공 탐지기가 저장소에 없었다
+
+날짜: 2026-08-18
+영역: Infra
+심각도: High
+상태: 해결됨
+
+증상
+포트폴리오 문서를 검수하다가 README와 ADR-0008이 "서비스 필수 모델 3종"으로 적어둔 목록과
+코드가 실제로 로드하는 파일이 다르다는 것을 발견했다.
+
+```
+scripts/batch_cv_verdicts.py:124
+    detector = YOLO(os.path.join(ROOT, "models", "ball_broadcast_v1.pt"))
+
+git ls-files models/
+    models/baseball_detector.pt
+    models/pitch_predictor.h5
+    models/scaler.pkl
+```
+
+실제로 쓰는 ball_broadcast_v1.pt(24MB)는 추적되지 않고, ADR-0009에서 폐기한
+baseball_detector.pt(중계 감지율 3%)가 LFS로 추적되고 있었다.
+
+재현 조건
+저장소를 새로 클론하고 `git lfs pull` 실행 → `scripts/batch_cv_verdicts.py` 실행.
+재현율: 항상.
+
+원인
+표면 - 문서에 적힌 모델 목록이 코드와 다르다.
+근본 - `.gitignore`가 `*.pt`로 전부 차단하고 아래에서 예외를 하나씩 푸는 구조인데,
+ADR-0009(2026-08-06)로 탐지기를 교체하면서 새 파일을 예외 목록에 추가하지 않았다.
+
+```
+20  *.pt
+23  !models/pitch_predictor.h5
+24  !models/scaler.pkl
+25  !models/baseball_detector.pt      <- 폐기된 모델만 예외로 남아 있었다
+```
+
+`git add`가 조용히 무시하고 넘어가기 때문에 커밋 시점에 아무 신호가 없었다.
+
+왜 12일 동안 드러나지 않았나
+앱은 CV 판정을 재생 중에 계산하지 않고 `streamlit_app/fixed_demo_cv.json`을 읽는다
+(ADR-0013, TS-036). 그 JSON은 이미 커밋돼 있어서, 탐지기가 없어도 화면은 정상으로
+보였다. 재현이 깨진 것은 사전 계산 단계뿐이었고 그 단계를 다시 돌릴 일이 없었다.
+
+해결
+```
+.gitignore     !models/ball_broadcast_v1.pt 추가
+.gitattributes models/ball_broadcast_v1.pt filter=lfs diff=lfs merge=lfs -text 추가
+```
+
+폐기된 baseball_detector.pt는 지우지 않았다. TS-014에서 감지율 3%를 실측한 근거
+자료라, 지우면 그 기록을 재현할 수 없다.
+
+커밋: fd22320 fix: 서비스가 쓰는 공 탐지기가 저장소에 없었다 — gitignore 예외 누락
+
+검증
+`git lfs ls-files`에 ball_broadcast_v1.pt가 올라온 것을 확인하고 원격에 푸시했다.
+24MB 업로드 완료, 원격 LFS 목록에서 재확인.
+
+추후 관리
+재발 방지 - README와 ADR-0008의 모델 목록을 현재 파일 기준으로 갱신하고, ADR-0008에
+정정 항목을 달았다.
+남은 리스크 - 같은 구조가 그대로다. 다음에 모델을 또 교체하면 똑같이 조용히 빠진다.
+`git status --ignored models/`를 배포 전에 한 번 보거나, 예외 목록 방식을 버리고
+`models/` 전체를 추적하는 쪽으로 바꾸는 게 근본 해결이다.
+
+배운 점
+차단 목록에 예외를 두는 방식(`*.pt` + `!` 목록)은 파일이 교체될 때 조용히 깨진다.
+그리고 사전 계산 결과를 커밋해두면 파이프라인이 끊겨도 화면이 멀쩡해 보인다.
+결과물이 정상이라는 것과 그 결과물을 다시 만들 수 있다는 것은 별개다.
+ADR로 대체 결정을 남길 때 파일 추적 설정도 같이 옮겼는지 확인해야 한다.
