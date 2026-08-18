@@ -3,3 +3,4 @@
 models/pitch_predictor.h5 filter=lfs diff=lfs merge=lfs -text
 models/scaler.pkl filter=lfs diff=lfs merge=lfs -text
 models/baseball_detector.pt filter=lfs diff=lfs merge=lfs -text
+models/ball_broadcast_v1.pt filter=lfs diff=lfs merge=lfs -text

@@ -99,7 +99,7 @@ YouTube 영상 연동 · 실시간 스캔 기능은 무료 배포 환경(리소�
 | Language | Python 3.13 | |
 | 데이터 수집 | pybaseball (Statcast) | |
 | 딥러닝 | TensorFlow 2.21 / Keras 3 | BiLSTM + Embedding (8분류) |
-| 객체 탐지 | YOLOv8 (Ultralytics) | 야구공 커스텀 학습 → 궤적 추적 |
+| 객체 탐지 | YOLOv8 (Ultralytics) | 중계 도메인 데이터셋으로 재파인튜닝 → 궤적 추적 |
 | 궤적 분류 | scikit-learn | 궤적 특징 → 속구/변화구 2분류 |
 | 영상 처리 | OpenCV, yt-dlp | YouTube 다운로드 + 프레임 처리 |
 | OCR | pytesseract | 스코어버그 판독 → 타임라인 앵커 (시스템 tesseract 필요) |
@@ -159,7 +159,8 @@ baseball-pitch-predictor/
 ├── models/
 │   ├── pitch_predictor.h5   # BiLSTM 모델 (Git LFS)
 │   ├── scaler.pkl            # 피처 스케일러 (Git LFS)
-│   └── baseball_detector.pt  # YOLO 커스텀 모델 (Git LFS)
+│   ├── ball_broadcast_v1.pt  # 현재 쓰는 공 탐지기 — 중계 도메인 재파인튜닝 (Git LFS)
+│   └── baseball_detector.pt  # 폐기된 초기 탐지기 — 중계 감지율 3% (TS-014, ADR-0009)
 ├── notebooks/
 │   ├── eda.py
 │   └── figures/
@@ -228,7 +229,7 @@ streamlit run streamlit_app/app.py
 ```
 [학습 · 1회]
 Statcast 2025 전체 → Preprocessing → Feature Engineering → BiLSTM 학습
-Roboflow 라벨링   → YOLOv8 학습 → 야구공 탐지기
+중계 도메인 데이터셋 → YOLOv8 재파인튜닝 → 야구공 탐지기
 궤적 특징 추출     → 2분류 분류기 학습
 
 [사전 계산 · 경기당 1회]

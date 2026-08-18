@@ -23,6 +23,7 @@ runs/
 !models/pitch_predictor.h5
 !models/scaler.pkl
 !models/baseball_detector.pt
+!models/ball_broadcast_v1.pt
 
 # ── 앱 캐시 ──
 streamlit_app/.scan_cache/
