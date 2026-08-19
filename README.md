@@ -12,7 +12,7 @@
 ![Streamlit](https://img.shields.io/badge/Streamlit-1.58-FF4B4B?logo=streamlit&logoColor=white)
 ![Git LFS](https://img.shields.io/badge/Git%20LFS-model%20files-8A8A8A)
 
-[데모 영상 1분](https://youtu.be/XnbVtPsR3V8) · [배포된 앱](https://pitchiq-dlpitcher.streamlit.app/) · [트러블슈팅 39건](docs/TROUBLESHOOTING.md) · [설계 결정 기록](docs/ADR.md)
+[데모 영상 1분](https://youtu.be/XnbVtPsR3V8) · [배포된 앱](https://pitchiq-dlpitcher.streamlit.app/) · [트러블슈팅 40건](docs/TROUBLESHOOTING.md) · [설계 결정 기록](docs/ADR.md)
 
 <a href="https://youtu.be/XnbVtPsR3V8">
   <img src="https://img.youtube.com/vi/XnbVtPsR3V8/maxresdefault.jpg" width="640" alt="PitchIQ 데모 영상" />
@@ -251,7 +251,7 @@ baseball-pitch-predictor/
 ├── tests/                            # pytest 115개
 ├── notebooks/figures/                # 혼동행렬·클래스별 정확도 그래프
 └── docs/
-    ├── TROUBLESHOOTING.md            # 문제 해결 기록 39건 (실패한 시도 포함)
+    ├── TROUBLESHOOTING.md            # 문제 해결 기록 40건 (실패한 시도 포함)
     ├── ADR.md                        # 설계 결정 기록 14건
     ├── ROADMAP.md
     └── blog/                         # Day1 · Day2 기술 정리
@@ -288,7 +288,7 @@ baseball-pitch-predictor/
 
 | 문서 | 내용 |
 |---|---|
-| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | 해결 기록 39건. 증상 / 재현 조건 / 표면·근본 원인 / 시도했지만 안 된 것 / 해결 / 검증 |
+| [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | 해결 기록 40건. 증상 / 재현 조건 / 표면·근본 원인 / 시도했지만 안 된 것 / 해결 / 검증 |
 | [`docs/ADR.md`](docs/ADR.md) | 설계 결정 14건과 그 근거. 대체되거나 틀린 것으로 판명된 결정도 상태를 갱신해 남김 |
 | [`docs/RETROSPECT.md`](docs/RETROSPECT.md) | 회고(KPT). 3주간 작업 방식이 어떻게 바뀌었는지 전후 비교 |
 | [`docs/blog/`](docs/blog/) | Day1 · Day2 기술 정리 |
