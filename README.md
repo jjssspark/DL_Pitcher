@@ -148,7 +148,7 @@ Statcast  → BiLSTM 배치 추론  → 예측 캐시 (.bilstm_cache/*.pkl)
 |---|---:|---:|
 | Random Guess (8-class) | 12.5% | — |
 | Initial LSTM | 39.0% | — |
-| BiLSTM (Embedding + 투수 성향 피처, seq_len=5) | 46.1% | 39.2% |
+| BiLSTM (Embedding + 투수 성향 피처, seq_len=5) | 46.6% | 39.2% |
 | BiLSTM (Embedding + 투수 성향 피처, seq_len=3) — 현재 모델 | 48.5% | 43.4% |
 
 시퀀스 길이 3·5·8과 클래스 불균형 보정(class weight)을 비교해 `seq_len=3`을 채택했습니다.
