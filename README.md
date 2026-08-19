@@ -290,6 +290,7 @@ baseball-pitch-predictor/
 |---|---|
 | [`docs/TROUBLESHOOTING.md`](docs/TROUBLESHOOTING.md) | 해결 기록 39건. 증상 / 재현 조건 / 표면·근본 원인 / 시도했지만 안 된 것 / 해결 / 검증 |
 | [`docs/ADR.md`](docs/ADR.md) | 설계 결정 14건과 그 근거. 대체되거나 틀린 것으로 판명된 결정도 상태를 갱신해 남김 |
+| [`docs/RETROSPECT.md`](docs/RETROSPECT.md) | 회고(KPT). 3주간 작업 방식이 어떻게 바뀌었는지 전후 비교 |
 | [`docs/blog/`](docs/blog/) | Day1 · Day2 기술 정리 |
 | [`docs/ROADMAP.md`](docs/ROADMAP.md) | 초기 5일 로드맵 |
 
