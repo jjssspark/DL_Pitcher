@@ -1846,7 +1846,9 @@ if loaded:
             _pose_active = bool(st.session_state.get("_pose_task_id"))
             _scan_st_note = st.session_state.get("_scan_status", "idle")
             if not _local_ready:
-                _sync_note = "아래 슬라이더로 투구를 이동하세요"
+                # 배포 환경에는 로컬 영상 파일이 없어 재생 시각을 못 받는다.
+                # 자동 진행이 안 되는 게 고장으로 보이지 않도록 이유까지 적는다.
+                _sync_note = "영상 자동 싱크 없음 — 아래 슬라이더나 이전/다음 버튼으로 투구를 이동하세요"
             elif _scan_st_note == "scanning":
                 _sync_note = "영상 분석 중…"
             elif _scan_st_note == "done":
@@ -2250,9 +2252,16 @@ if loaded:
             elif not _cv_all:
                 _cv_body = ('<span style="color:#6b7a91;font-size:.76rem">'
                             '사전 판정 파일이 없다 — scripts/batch_cv_verdicts.py</span>')
+            elif _ocr_i < 0:
+                # 아직 아무 투구도 선택되지 않은 시작 상태다. 여기서 "판정 대상 아님"을
+                # 띄우면 데이터가 없는 것처럼 읽힌다.
+                _cv_body = ('<span style="color:#8a99b0;font-size:.76rem">'
+                            '슬라이더로 투구를 선택하세요</span>')
             else:
                 _cv_body = ('<span style="color:#8a99b0;font-size:.76rem">'
-                            '이 공은 영상 판정 대상이 아님</span>')
+                            '이 공은 영상 판정을 시도하지 않음 '
+                            '<span style="color:#6b7a91">· 중계가 구속을 안 띄워 투구 시각을 못 잡음</span>'
+                            '</span>')
 
             # 위계를 뒤집는다. 예전에는 "판정 대상 아님" 안내가 카드에서 제일 크고 각주가
             # 세 줄이라, 정작 이 카드의 결론인 적중률이 구석에 밀려 있었다. 적중률을
